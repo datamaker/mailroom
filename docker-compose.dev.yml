@@ -1,0 +1,15 @@
+# 로컬 개발용 postgres 만 띄운다. 서버는 `npm run dev` 로.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: mailroom
+      POSTGRES_PASSWORD: mailroom
+      POSTGRES_DB: mailroom
+    ports:
+      - '5436:5432'
+    volumes:
+      - mailroom-dev-pgdata:/var/lib/postgresql/data
+
+volumes:
+  mailroom-dev-pgdata:

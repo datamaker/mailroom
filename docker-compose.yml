@@ -1,0 +1,54 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: mailroom
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mailroom}
+      POSTGRES_DB: mailroom
+    volumes:
+      - mailroom-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U mailroom']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # 컨테이너가 죽어도 뉴스레터 발송이 멈추지 않게.
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: '20m', max-file: '5' }
+
+  mailroom:
+    build: .
+    # 관리 UI 는 VPN 뒤에만 두고, 공개 경로는 앞단 nginx 가 갈라 준다.
+    ports:
+      - '127.0.0.1:${PORT:-9200}:9200'
+    environment:
+      DATABASE_URL: postgres://mailroom:${POSTGRES_PASSWORD:-mailroom}@postgres:5432/mailroom
+      MAILROOM_PUBLIC_URL: ${MAILROOM_PUBLIC_URL:?추적·구독 링크에 박히는 공개 주소가 필요합니다}
+      MAILROOM_SECRET: ${MAILROOM_SECRET:?재시작해도 링크가 살아 있으려면 고정 시크릿이 필요합니다}
+      MAILROOM_ADMIN_EMAILS: ${MAILROOM_ADMIN_EMAILS:-}
+      OIDC_ISSUER: ${OIDC_ISSUER:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      MAILROOM_SEND_PROVIDER: ${MAILROOM_SEND_PROVIDER:-ses}
+      MAILROOM_SEND_RATE: ${MAILROOM_SEND_RATE:-12}
+      MAILROOM_SEND_BATCH: ${MAILROOM_SEND_BATCH:-200}
+      AWS_SES_REGION: ${AWS_SES_REGION:-us-east-1}
+      AWS_SES_CONFIGURATION_SET: ${AWS_SES_CONFIGURATION_SET:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: '20m', max-file: '5' }
+
+volumes:
+  mailroom-pgdata:

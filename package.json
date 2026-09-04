@@ -1,0 +1,15 @@
+{
+  "name": "mailroom",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Self-hosted newsletter platform: address books, block editor, scheduled sends over SES, and delivery stats — driveable from a CLI and MCP.",
+  "workspaces": ["server", "web", "cli"],
+  "scripts": {
+    "dev": "npm run dev -w server",
+    "dev:web": "npm run dev -w web",
+    "build": "npm run build -w web && npm run build -w server",
+    "start": "npm run start -w server",
+    "migrate": "npm run migrate -w server"
+  },
+  "license": "MIT"
+}
