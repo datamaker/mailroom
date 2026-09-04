@@ -1,5 +1,17 @@
-/** 구독폼·수신거부처럼 로그인 없이 보이는 최소한의 공개 페이지 셸. */
-export function page(title: string, body: string) {
+function escape(v: string) {
+  return String(v ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/**
+ * 구독폼·수신거부처럼 로그인 없이 보이는 최소한의 공개 페이지 셸.
+ * title 은 주소록 이름에서 오므로 반드시 이스케이프한다 — body 는 호출부가 이미 처리한다.
+ */
+export function page(rawTitle: string, body: string) {
+  const title = escape(rawTitle);
   return `<!doctype html>
 <html lang="ko"><head>
 <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />

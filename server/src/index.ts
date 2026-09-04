@@ -25,6 +25,7 @@ import { webhookRoutes } from './routes/webhooks.js';
 import { compatRoutes } from './routes/compat.js';
 import { assetRoutes } from './routes/assets.js';
 import { startWorker, stopWorker } from './jobs/worker.js';
+import { startRateLimitSweeper } from './lib/ratelimit.js';
 import { purgeExpiredSessions } from './auth/service.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -40,7 +41,19 @@ async function main() {
   assertProductionConfig((msg) => app.log.warn(msg));
 
   await app.register(cookie);
-  await app.register(cors, { origin: true, credentials: true });
+  // origin:true + credentials 는 어떤 사이트에서든 인증된 요청을 보낼 수 있게 반사한다.
+  // 우리 UI 는 같은 오리진에서 뜨므로 알고 있는 오리진만 허용한다.
+  const allowedOrigins = new Set(
+    [config.adminUrl, config.publicUrl, ...(config.corsOrigins ?? [])].filter(Boolean)
+  );
+  await app.register(cors, {
+    credentials: true,
+    origin(origin, cb) {
+      // 서버 간 호출(Origin 없음)과 등록된 오리진만.
+      if (!origin || allowedOrigins.has(origin.replace(/\/$/, ''))) return cb(null, true);
+      cb(null, false);
+    },
+  });
   // 이미지 업로드. 본문 자체는 bodyLimit 과 별개로 여기서 제한한다.
   await app.register(multipart, { limits: { fileSize: 5 * 1024 * 1024, files: 1 } });
 
@@ -74,6 +87,17 @@ async function main() {
   // register() 로 감싸면 훅이 그 플러그인 스코프에만 걸린다 — 루트에 직접 붙인다.
   await authPlugin(app);
 
+  // 공개 경로가 내보내는 HTML(웹뷰·구독폼·수신거부)에 최소한의 보안 헤더를 건다.
+  // 콘텐츠 자체는 사내 사용자가 만들지만, 가져온 HTML 에 뭐가 섞여 있을지는 알 수 없다.
+  app.addHook('onSend', async (req, reply, payload) => {
+    const url = req.url.split('?')[0];
+    if (!/^\/(w|s|u|p|c)\//.test(url)) return payload;
+    reply.header('x-content-type-options', 'nosniff');
+    reply.header('referrer-policy', 'no-referrer');
+    reply.header('x-frame-options', 'DENY');
+    return payload;
+  });
+
   app.get('/api/health', async () => {
     await pool.query('select 1');
     return { ok: true, version: '0.1.0', provider: config.send.provider };
@@ -106,6 +130,7 @@ async function main() {
   await migrate();
   await initOidc();
   startWorker();
+  startRateLimitSweeper();
 
   const sessionSweep = setInterval(() => purgeExpiredSessions().catch(() => {}), 3_600_000);
   sessionSweep.unref?.();

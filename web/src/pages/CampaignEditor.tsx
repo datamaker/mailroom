@@ -4,6 +4,7 @@ import { api } from '../api';
 import { Modal } from '../components/ui';
 import { BlockEditor, newBlock, BLOCK_LABELS } from '../components/BlockEditor';
 import { PreviewModal } from './Templates';
+import { AutomationTab } from './AutomationTab';
 
 type Tab = 'settings' | 'content' | 'send';
 
@@ -20,11 +21,15 @@ export default function CampaignEditor() {
   const [templateOpen, setTemplateOpen] = useState(false);
   const dirty = useRef(false);
 
-  useEffect(() => {
+  const reload = useCallback(() => {
     api(`/api/campaigns/${id}`).then((r: any) => setC(r.campaign));
+  }, [id]);
+
+  useEffect(() => {
+    reload();
     api('/api/lists').then((r: any) => setLists(r.lists));
     api('/api/senders').then((r: any) => setSenders(r.senders));
-  }, [id]);
+  }, [id, reload]);
 
   const patch = useCallback((fields: Record<string, any>) => {
     setC((prev: any) => ({ ...prev, ...fields }));
@@ -74,6 +79,7 @@ export default function CampaignEditor() {
   }, [c, save]);
 
   if (!c) return <div className="empty">불러오는 중…</div>;
+  const isAutomation = c.type === 'automation';
 
   return (
     <>
@@ -82,6 +88,7 @@ export default function CampaignEditor() {
           ← 목록
         </Link>
         <strong style={{ fontSize: 16 }}>{c.subject || '(제목 없음)'}</strong>
+        {c.type === 'automation' ? <span className="tag">자동 이메일</span> : null}
         <div className="spacer" />
         <span className="faint">
           {saving ? '저장 중…' : savedAt ? `저장됨 ${savedAt.toLocaleTimeString('ko-KR')}` : ''}
@@ -101,7 +108,7 @@ export default function CampaignEditor() {
           [
             ['settings', '발송 정보'],
             ['content', '콘텐츠'],
-            ['send', '발송'],
+            ['send', isAutomation ? '발동 조건' : '발송'],
           ] as Array<[Tab, string]>
         ).map(([key, label], i) => (
           <span key={key}>
@@ -115,7 +122,13 @@ export default function CampaignEditor() {
 
       {tab === 'settings' ? <SettingsTab c={c} lists={lists} senders={senders} patch={patch} /> : null}
       {tab === 'content' ? <ContentTab c={c} patch={patch} /> : null}
-      {tab === 'send' ? <SendTab c={c} save={save} onSent={() => nav(`/emails/${c.id}`)} /> : null}
+      {tab === 'send' ? (
+        isAutomation ? (
+          <AutomationTab c={c} save={save} reload={reload} />
+        ) : (
+          <SendTab c={c} save={save} onSent={() => nav(`/emails/${c.id}`)} />
+        )
+      ) : null}
 
       {templateOpen ? (
         <TemplateModal
@@ -414,7 +427,14 @@ function ContentTab({ c, patch }: { c: any; patch: (f: Record<string, any>) => v
   return (
     <div className="editor">
       <div className="editor-canvas">
-        <iframe className="editor-frame" srcDoc={html} title="미리보기" style={{ height: '100%', border: 0 }} />
+        {/* sandbox 없이는 srcDoc 이 부모 오리진에서 실행된다 */}
+          <iframe
+            className="editor-frame"
+            srcDoc={html}
+            title="미리보기"
+            sandbox=""
+            style={{ height: '100%', border: 0 }}
+          />
       </div>
       <div className="editor-side">
         <BlockEditor

@@ -105,6 +105,7 @@ export function PreviewModal({ template, onClose }: { template: any; onClose: ()
       <iframe
         srcDoc={html}
         title="미리보기"
+        sandbox=""
         style={{ width: '100%', height: '60vh', border: '1px solid var(--border)', borderRadius: 6 }}
       />
       <div className="btn-row" style={{ justifyContent: 'flex-end', marginTop: 14 }}>

@@ -39,6 +39,13 @@ export async function assetRoutes(app: FastifyInstance) {
     }
     if (!data.length) throw badRequest('빈 파일입니다.');
 
+    // 클라이언트가 보낸 Content-Type 은 얼마든지 위조된다. 실제 바이트로 확인한다.
+    const actual = sniff(data);
+    if (!actual) throw badRequest('이미지 파일이 아닙니다.');
+    if (actual !== mime) {
+      throw badRequest(`파일 내용이 ${mime} 이 아닙니다(실제: ${actual}).`);
+    }
+
     const sha = createHash('sha256').update(data).digest('hex');
     const size = imageSize(data, mime);
 
@@ -87,10 +94,31 @@ export async function assetRoutes(app: FastifyInstance) {
 
     reply.header('content-type', row.mime);
     reply.header('etag', etag);
+    // SVG 는 스크립트를 품을 수 있다. <img> 로 불릴 땐 실행되지 않지만 주소로 직접 열면
+    // 실행되므로, 어떤 리소스도 불러오지 못하게 막고 스니핑도 끈다.
+    reply.header('content-security-policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+    reply.header('x-content-type-options', 'nosniff');
     // 내용이 바뀌면 id 도 바뀐다 — 영구 캐시해도 안전하다.
     reply.header('cache-control', 'public, max-age=31536000, immutable');
     return reply.send(row.data);
   });
+}
+
+/** 매직바이트로 실제 형식을 알아낸다. 확장자나 Content-Type 은 믿지 않는다. */
+function sniff(b: Buffer): string | null {
+  if (b.length < 12) return null;
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return 'image/png';
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg';
+  if (b.subarray(0, 3).toString('latin1') === 'GIF') return 'image/gif';
+  if (b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP') {
+    return 'image/webp';
+  }
+  // SVG 는 텍스트라 매직바이트가 없다 — 앞부분에 svg 루트가 있는지 본다.
+  const head = b.subarray(0, 1024).toString('utf8').trim().toLowerCase();
+  if (head.startsWith('<?xml') || head.startsWith('<svg') || head.startsWith('<!doctype svg')) {
+    return head.includes('<svg') ? 'image/svg+xml' : null;
+  }
+  return null;
 }
 
 /** 이미지 헤더만 읽어 크기를 뽑는다. 에디터가 폭을 맞출 때 쓴다. */

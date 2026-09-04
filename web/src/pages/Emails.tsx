@@ -8,7 +8,7 @@ export default function Emails() {
   const nav = useNavigate();
   const [rows, setRows] = useState<any[]>([]);
   const [lists, setLists] = useState<any[]>([]);
-  const [filters, setFilters] = useState({ status: 'all', listId: '', q: '' });
+  const [filters, setFilters] = useState({ status: 'all', listId: '', q: '', type: '' });
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
@@ -23,12 +23,17 @@ export default function Emails() {
   useEffect(() => {
     api('/api/lists').then((r: any) => setLists(r.lists));
   }, []);
-  useEffect(load, [filters.status, filters.listId, filters.q]);
+  useEffect(load, [filters.status, filters.listId, filters.q, filters.type]);
 
   return (
     <>
       <h1>이메일</h1>
       <div className="toolbar">
+        <select value={filters.type} onChange={(e) => setFilters({ ...filters, type: e.target.value })}>
+          <option value="">모든 유형</option>
+          <option value="regular">일반 이메일</option>
+          <option value="automation">자동 이메일</option>
+        </select>
         <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}>
           <option value="all">모든 상태</option>
           <option value="draft">작성중</option>
@@ -154,6 +159,7 @@ function CreateModal({ lists, onClose }: { lists: any[]; onClose: () => void }) 
   const [subject, setSubject] = useState('');
   const [listId, setListId] = useState(lists[0]?.id ?? '');
   const [templateId, setTemplateId] = useState('');
+  const [kind, setKind] = useState<'regular' | 'automation'>('regular');
   const [templates, setTemplates] = useState<any[]>([]);
   const [previewing, setPreviewing] = useState<any | null>(null);
   const [busy, setBusy] = useState(false);
@@ -169,6 +175,13 @@ function CreateModal({ lists, onClose }: { lists: any[]; onClose: () => void }) 
         method: 'POST',
         body: { subject, list_id: listId || null, content: templateId ? [] : BLANK },
       });
+      if (kind === 'automation') {
+        // 조건은 편집 화면에서 고른다. 여기서는 종류만 정해 둔다.
+        await api(`/api/campaigns/${r.campaign.id}`, {
+          method: 'PATCH',
+          body: { type: 'automation', trigger: { type: 'subscribe', delayMinutes: 0 } },
+        });
+      }
       // 템플릿은 만든 뒤에 입힌다 — 서식과 스타일을 함께 가져오기 위해.
       if (templateId) {
         await api(`/api/campaigns/${r.campaign.id}/apply-template`, {
@@ -183,7 +196,19 @@ function CreateModal({ lists, onClose }: { lists: any[]; onClose: () => void }) 
   };
 
   return (
-    <Modal title="일반 이메일 만들기" onClose={onClose}>
+    <Modal title="이메일 만들기" onClose={onClose}>
+      <label className="field">
+        <span>종류</span>
+        <select value={kind} onChange={(e) => setKind(e.target.value as any)}>
+          <option value="regular">일반 이메일 — 한 번 골라서 한 번 발송</option>
+          <option value="automation">자동 이메일 — 조건이 맞을 때마다 한 명씩</option>
+        </select>
+        <div className="hint">
+          {kind === 'automation'
+            ? '구독·오픈·클릭 같은 사건에 반응합니다. 조건은 다음 화면에서 정합니다.'
+            : '뉴스레터, 공지처럼 여러 구독자에게 한 번에 보내는 이메일입니다.'}
+        </div>
+      </label>
       <label className="field">
         <span>제목</span>
         <input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="9월 1주차 뉴스레터" />

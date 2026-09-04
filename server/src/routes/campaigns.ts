@@ -48,6 +48,10 @@ export async function campaignRoutes(app: FastifyInstance) {
       params.push(q.listId);
       clauses.push(`c.list_id = $${params.length}::uuid`);
     }
+    if (q.type) {
+      params.push(q.type);
+      clauses.push(`c.type = $${params.length}`);
+    }
     if (q.tag) {
       params.push(q.tag);
       clauses.push(`$${params.length} = any(c.tags)`);
@@ -73,7 +77,7 @@ export async function campaignRoutes(app: FastifyInstance) {
     const rows = await many(
       `select c.id, c.name, c.subject, c.status, c.type, c.tags, c.is_ad, c.list_id,
               c.scheduled_at, c.send_started_at, c.send_finished_at, c.created_at, c.updated_at,
-              c.total_count, c.sent_count, c.failed_count, c.unique_open_count, c.unique_click_count,
+              c.type, c.total_count, c.sent_count, c.failed_count, c.unique_open_count, c.unique_click_count,
               c.unsub_count, c.public_slug, c.public_visibility,
               l.name as list_name
          from campaigns c left join lists l on l.id = c.list_id

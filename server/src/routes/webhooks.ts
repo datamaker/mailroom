@@ -83,7 +83,13 @@ async function handleSesEvent(msg: any) {
           msg.bounce?.bounceSubType ?? 'bounce',
         ]);
         await recordEvent(recipient, 'bounce', { hard, subType: msg.bounce?.bounceSubType });
-        await query('update campaigns set bounce_count = bounce_count + 1 where id = $1', [recipient.campaign_id]);
+        // 발송 후에 바운스가 오므로 sent_count 를 같이 줄이지 않으면 두 수치가 어긋난다.
+        await query(
+          `update campaigns set bounce_count = bounce_count + 1,
+                                sent_count = greatest(sent_count - 1, 0)
+            where id = $1`,
+          [recipient.campaign_id]
+        );
       }
       return;
     }

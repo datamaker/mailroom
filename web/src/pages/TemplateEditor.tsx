@@ -104,7 +104,14 @@ export default function TemplateEditor() {
 
       <div className="editor">
         <div className="editor-canvas">
-          <iframe className="editor-frame" srcDoc={html} title="미리보기" style={{ height: '100%', border: 0 }} />
+          {/* sandbox 없이는 srcDoc 이 부모 오리진에서 실행된다 — 가져온 HTML 에 스크립트가 있으면 세션이 털린다 */}
+          <iframe
+            className="editor-frame"
+            srcDoc={html}
+            title="미리보기"
+            sandbox=""
+            style={{ height: '100%', border: 0 }}
+          />
         </div>
         <div className="editor-side">
           <BlockEditor

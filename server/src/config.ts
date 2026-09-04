@@ -31,6 +31,12 @@ export const config = {
   /** 추적 토큰·세션 서명용. 미설정 시 부팅할 때마다 링크가 무효화된다. */
   secret: env.MAILROOM_SECRET || '',
 
+  /** 브라우저에서 API 를 부를 수 있는 추가 오리진 (쉼표 구분). 보통 비워 둔다. */
+  corsOrigins: (env.MAILROOM_CORS_ORIGINS || '')
+    .split(',')
+    .map((s) => s.trim().replace(/\/$/, ''))
+    .filter(Boolean),
+
   /** 첫 로그인 사용자를 owner로 승격시킬 이메일 목록 */
   adminEmails: (env.MAILROOM_ADMIN_EMAILS || '')
     .split(',')

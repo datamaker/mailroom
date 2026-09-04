@@ -6,10 +6,24 @@ import { parseUserAgent } from '../lib/ua.js';
 import { parseRecipientToken } from '../render/tracking.js';
 import { escapeHtml } from '../render/html.js';
 import { normalizeEmail, upsertSubscriber } from '../lib/subscribers.js';
-import { notFound } from '../lib/errors.js';
+import { HttpError, notFound } from '../lib/errors.js';
 import { mergeTags } from '../render/merge.js';
 import { page } from '../lib/page.js';
+import { rateLimit } from '../lib/ratelimit.js';
 import { confirmResultPage, confirmSubscription, sendConfirmEmail } from '../send/confirm.js';
+
+/**
+ * 구독 신청 제한. 확인 메일을 임의의 주소로 뿌리는 데 악용되지 않게 한다.
+ * 사람이 폼을 채우는 속도로는 절대 걸리지 않는 값이다.
+ */
+const SUBSCRIBE_BY_IP = { windowMs: 60 * 60_000, max: 20 };
+const SUBSCRIBE_BY_EMAIL = { windowMs: 60 * 60_000, max: 3 };
+
+function throttleSubscribe(ip: string | null, email: string) {
+  const byIp = rateLimit(`sub:ip:${ip ?? 'unknown'}`, SUBSCRIBE_BY_IP);
+  if (!byIp.ok) return byIp;
+  return rateLimit(`sub:em:${email}`, SUBSCRIBE_BY_EMAIL);
+}
 
 /** 1x1 투명 GIF */
 const PIXEL = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
@@ -200,6 +214,12 @@ export async function publicRoutes(app: FastifyInstance) {
     const { email, ad_agreed, ...fields } = body;
     const clean = normalizeEmail(email);
 
+    const limited = throttleSubscribe(clientIp(req), clean);
+    if (!limited.ok) {
+      reply.type('text/html').code(429);
+      return page('구독 신청', '<p>요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요.</p>');
+    }
+
     const outcome = await upsertSubscriber(list.id, {
       email: clean,
       fields,
@@ -238,6 +258,10 @@ export async function publicRoutes(app: FastifyInstance) {
     const list = await one<any>('select * from lists where slug = $1 and form_enabled', [slug]);
     if (!list) throw notFound('구독 폼을 찾을 수 없습니다.');
     const b = (req.body ?? {}) as Record<string, any>;
+    const limited = throttleSubscribe(clientIp(req), normalizeEmail(b.email ?? ''));
+    if (!limited.ok) {
+      throw new HttpError(429, 'rate_limited', '요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요.');
+    }
     const outcome = await upsertSubscriber(list.id, {
       email: b.email,
       fields: b.fields ?? {},
