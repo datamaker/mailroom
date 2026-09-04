@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api, fmtDate } from '../api';
 import { Empty, Modal } from '../components/ui';
 
@@ -50,20 +51,13 @@ export default function Templates() {
                 <td className="num muted">{t.block_count ?? '-'}</td>
                 <td className="faint">{fmtDate(t.updated_at)}</td>
                 <td className="right nowrap">
+                  <Link className="btn sm primary" to={`/templates/${t.id}/edit`}>
+                    편집
+                  </Link>{' '}
                   <button className="btn sm" onClick={() => setPreview(t)}>
                     미리보기
                   </button>{' '}
-                  <button
-                    className="btn sm"
-                    onClick={async () => {
-                      const name = prompt('새 이름', t.name);
-                      if (!name) return;
-                      await api(`/api/templates/${t.id}`, { method: 'PATCH', body: { name } });
-                      load();
-                    }}
-                  >
-                    이름 변경
-                  </button>{' '}
+
                   <button
                     className="btn sm danger"
                     onClick={async () => {
