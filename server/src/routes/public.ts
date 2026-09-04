@@ -7,6 +7,7 @@ import { parseRecipientToken } from '../render/tracking.js';
 import { escapeHtml } from '../render/html.js';
 import { normalizeEmail, upsertSubscriber } from '../lib/subscribers.js';
 import { notFound } from '../lib/errors.js';
+import { mergeTags } from '../render/merge.js';
 import { page } from '../lib/page.js';
 import { confirmResultPage, confirmSubscription, sendConfirmEmail } from '../send/confirm.js';
 
@@ -53,8 +54,12 @@ export async function publicRoutes(app: FastifyInstance) {
     );
     if (!c || !c.content_html) throw notFound('이메일을 찾을 수 없습니다.');
     if (c.public_visibility !== 'public' && c.status !== 'sent') throw notFound('공개되지 않은 이메일입니다.');
-    // 웹뷰에서는 추적 자리표시자를 비워 둔다(수신자 특정 불가).
-    const html = c.content_html.split('__MR_RCPT__').join('web');
+    // 웹뷰에는 수신자가 없다. 추적 자리표시자를 비우고, 메일머지 태그도 지운다 —
+    // 안 그러면 방문자에게 $%name%$ 같은 원본 태그가 그대로 보인다.
+    const html = mergeTags(c.content_html.split('__MR_RCPT__').join('web'), {
+      fields: {},
+      links: { unsubscribe: `${config.publicUrl}/u/expired`, preferences: '#', webview: '#' },
+    });
     reply.header('content-type', 'text/html; charset=utf-8');
     return reply.send(html);
   });
