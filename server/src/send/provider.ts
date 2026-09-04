@@ -111,6 +111,31 @@ class SmtpProvider implements MailProvider {
   }
 }
 
+/**
+ * 발송 잠금을 프로바이더 경계에서 강제한다. 라우트 가드만 두면 새 발송 경로를
+ * 하나 추가할 때마다 빠뜨릴 수 있는데, 여기서 막으면 어떤 경로로도 못 나간다.
+ */
+class LockedProvider implements MailProvider {
+  readonly name: string;
+  constructor(private inner: MailProvider) {
+    this.name = `${inner.name}(locked)`;
+  }
+  async send(msg: OutgoingMessage): Promise<SendResult> {
+    const to = msg.to.trim().toLowerCase();
+    if (!config.send.allowedRecipients.includes(to)) {
+      throw new Error(
+        `발송이 잠겨 있습니다(MAILROOM_SEND_LOCK). ${msg.to} 로 보내지 않았습니다. ` +
+          '허용 주소는 MAILROOM_ALLOWED_RECIPIENTS 에만 있습니다.'
+      );
+    }
+    return this.inner.send(msg);
+  }
+}
+
+export function sendLocked() {
+  return config.send.lock;
+}
+
 let provider: MailProvider | null = null;
 
 export function mailProvider(): MailProvider {
@@ -125,6 +150,7 @@ export function mailProvider(): MailProvider {
     default:
       provider = new SesProvider();
   }
+  if (config.send.lock) provider = new LockedProvider(provider);
   return provider;
 }
 

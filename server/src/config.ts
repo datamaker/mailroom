@@ -51,6 +51,18 @@ export const config = {
 
   send: {
     provider: (env.MAILROOM_SEND_PROVIDER || 'ses') as 'ses' | 'smtp' | 'console',
+
+    /**
+     * 발송 잠금. 켜져 있으면 구독자에게 나가는 모든 메일이 막힌다.
+     * 이관 직후처럼 실제 주소록이 들어와 있는데 아직 보낼 준비가 안 된 상태에서
+     * 실수로 나가는 것을 막는 안전장치다. allowedRecipients 에 적은 주소로만
+     * (테스트 발송 등) 나갈 수 있다.
+     */
+    lock: bool(env.MAILROOM_SEND_LOCK, false),
+    allowedRecipients: (env.MAILROOM_ALLOWED_RECIPIENTS || '')
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean),
     /** 초당 발송 상한. SES 계정 한도(us-east-1 = 14/s)보다 낮게 둔다. */
     rateLimit: int(env.MAILROOM_SEND_RATE, 12),
     batchSize: int(env.MAILROOM_SEND_BATCH, 200),

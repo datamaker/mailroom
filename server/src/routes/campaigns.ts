@@ -5,6 +5,8 @@ import { currentUserId, requireWrite } from '../auth/plugin.js';
 import { shortId } from '../lib/slug.js';
 import { countAudience } from '../send/audience.js';
 import { getCampaign, prefixAdSubject, renderCampaign, sendTestEmail } from '../send/campaign.js';
+import { sendLocked } from '../send/provider.js';
+import { config } from '../config.js';
 import { renderEmailHtml } from '../render/html.js';
 import { usedTags } from '../render/merge.js';
 import { enqueue } from '../jobs/worker.js';
@@ -240,6 +242,14 @@ export async function campaignRoutes(app: FastifyInstance) {
     const count = await countAudience(c.list_id, c.target || {});
 
     const issues: string[] = [];
+    if (sendLocked()) {
+      issues.push(
+        `발송 잠금이 켜져 있습니다 — 실제 발송이 막혀 있습니다` +
+          (config.send.allowedRecipients.length
+            ? ` (허용: ${config.send.allowedRecipients.join(', ')})`
+            : '')
+      );
+    }
     if (!c.subject.trim()) issues.push('제목이 비어 있습니다.');
     if (!c.sender_email) issues.push('발신자 이메일 주소가 없습니다.');
     if (!Array.isArray(c.content) || !c.content.length) issues.push('콘텐츠가 비어 있습니다.');
@@ -346,6 +356,7 @@ export async function campaignRoutes(app: FastifyInstance) {
     if (!c.subject.trim()) throw badRequest('제목이 비어 있습니다.');
     if (!Array.isArray(c.content) || !c.content.length) throw badRequest('콘텐츠가 비어 있습니다.');
     validateTrigger((c as any).trigger as Trigger);
+    if (sendLocked()) throw badRequest('발송이 잠겨 있어 자동 이메일을 켤 수 없습니다.');
 
     // activated_at 을 여기서 찍는다 — 이 시각 이후의 사건만 발동 대상이라,
     // 켜자마자 기존 구독자 전원에게 나가는 사고를 구조적으로 막는다.
@@ -398,6 +409,11 @@ export async function campaignRoutes(app: FastifyInstance) {
 }
 
 async function assertSendable(id: string) {
+  if (sendLocked()) {
+    throw badRequest(
+      '발송이 잠겨 있습니다. 서버의 MAILROOM_SEND_LOCK 을 끄기 전에는 구독자에게 보낼 수 없습니다.'
+    );
+  }
   const c = await getCampaign(id);
   if (!c.list_id) throw badRequest('주소록이 선택되지 않았습니다.');
   if (!c.sender_email) throw badRequest('발신자 이메일 주소가 없습니다.');
