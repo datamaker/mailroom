@@ -69,6 +69,16 @@ button { font-family: inherit; }
 }
 .content { padding: 28px 32px 64px; max-width: 1120px; }
 
+@media (max-width: 860px) {
+  :root { --sidebar-w: 60px; }
+  .brand span:not(.dot) { display: none; }
+  .nav-item { justify-content: center; font-size: 12px; padding: 9px 4px; }
+  .sidebar-footer { display: none; }
+  .content { padding: 20px 16px 48px; }
+  .editor { grid-template-columns: 1fr; }
+  .editor-side { border-left: 0; border-top: 1px solid var(--border); }
+}
+
 h1 { font-size: 24px; margin: 0 0 22px; }
 h2 { font-size: 17px; margin: 28px 0 12px; }
 h3 { font-size: 14px; margin: 20px 0 8px; color: var(--text-muted); }
@@ -86,10 +96,12 @@ h3 { font-size: 14px; margin: 20px 0 8px; color: var(--text-muted); }
 .card .delta .down { color: var(--red); }
 
 .panel { border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+/* 표는 줄바꿈으로 뭉개지 말고 가로로 스크롤시킨다. */
+.panel:has(> table.data) { padding: 0; overflow-x: auto; }
 .panel + .panel { margin-top: 14px; }
 
 /* ---- 테이블 ---- */
-table.data { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+table.data { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 560px; }
 table.data th {
   text-align: left; font-weight: 600; color: var(--text-muted);
   background: var(--bg-sunken); padding: 10px 12px; white-space: nowrap;
@@ -103,17 +115,61 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 /* ---- 폼 ---- */
 label.field { display: block; margin-bottom: 14px; font-size: 13px; color: var(--text-muted); }
 label.field > span { display: block; margin-bottom: 6px; font-weight: 500; color: var(--text); }
-input[type='text'], input[type='email'], input[type='number'], input[type='datetime-local'],
-input[type='url'], select, textarea {
+/* type 을 생략한 input 이 많다. input[type='text'] 는 속성이 실제로 있을 때만 걸리므로
+   "이건 아님" 목록으로 뒤집어야 전부 잡힌다 (date, datetime-local, search 도 포함). */
+input:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='submit']):not([type='button']):not([type='range']):not([type='color']),
+select, textarea {
   width: 100%; padding: 9px 11px; border: 1px solid var(--border-strong);
   border-radius: 6px; font-size: 14px; font-family: inherit; background: #fff; color: var(--text);
+  line-height: 1.4;
+  /* 날짜 입력은 기본 스타일이 OS 마다 제각각이라 높이를 맞춰 준다. */
+  min-height: 38px;
+  -webkit-appearance: none;
+  appearance: none;
 }
+
+/* select 는 화살표가 사라지므로 직접 그린다. */
+select {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%236b7280' d='M1 1.5 6 6.5l5-5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+  padding-right: 30px;
+}
+
+/* 날짜 입력의 달력 아이콘은 appearance:none 으로도 남는다 — 위치만 정리. */
+input[type='date']::-webkit-calendar-picker-indicator,
+input[type='datetime-local']::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.55;
+}
+input[type='date']:hover::-webkit-calendar-picker-indicator,
+input[type='datetime-local']:hover::-webkit-calendar-picker-indicator { opacity: 1; }
+
+input[type='file'] {
+  font-size: 13px; color: var(--text-muted);
+}
+input[type='file']::file-selector-button {
+  padding: 7px 12px; margin-right: 10px; border: 1px solid var(--border-strong);
+  border-radius: 6px; background: #fff; color: var(--text);
+  font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+input[type='file']::file-selector-button:hover { background: var(--bg-sunken); }
+
+input::placeholder, textarea::placeholder { color: var(--text-faint); }
+input:disabled, select:disabled, textarea:disabled { background: var(--bg-sunken); color: var(--text-faint); }
 input:focus, select:focus, textarea:focus { outline: 2px solid rgba(232, 84, 63, 0.25); border-color: var(--accent); }
 textarea { min-height: 90px; resize: vertical; }
-.row { display: flex; gap: 12px; }
-.row > * { flex: 1; }
+/* 좁은 화면에서 접히게. min-width:0 이 없으면 긴 값이 칸을 밀어내 넘친다. */
+.row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
+.row > * { flex: 1 1 200px; min-width: 0; }
+
+/* 필터처럼 칸 수가 많은 줄. auto-fill 이라 마지막 한 칸만 남아도 늘어나지 않는다. */
+.row.fill { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
 .check { display: flex; align-items: center; gap: 8px; font-size: 13.5px; margin-bottom: 10px; }
-.check input { width: auto; }
+.check input[type='checkbox'] {
+  width: 16px; height: 16px; min-height: 0; margin: 0;
+  accent-color: var(--accent); cursor: pointer;
+}
 
 /* ---- 버튼 ---- */
 .btn {
@@ -149,7 +205,8 @@ textarea { min-height: 90px; resize: vertical; }
 
 .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
 .toolbar .spacer { flex: 1; }
-.toolbar select, .toolbar input { width: auto; padding: 7px 10px; font-size: 13px; }
+.toolbar select, .toolbar input { width: auto; padding: 6px 10px; font-size: 13px; min-height: 32px; }
+.toolbar select { padding-right: 28px; }
 
 .tabs { display: flex; gap: 20px; border-bottom: 1px solid var(--border); margin-bottom: 24px; }
 .tabs a { padding: 10px 2px; color: var(--text-faint); font-weight: 500; border-bottom: 2px solid transparent; }
@@ -185,7 +242,7 @@ textarea { min-height: 90px; resize: vertical; }
 .bars .bar .axis { font-size: 11px; color: var(--text-faint); }
 
 /* ---- 에디터 ---- */
-.editor { display: grid; grid-template-columns: 1fr 340px; gap: 0; height: calc(100vh - 56px); }
+.editor { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 0; height: calc(100vh - 56px); }
 .editor-canvas { overflow: auto; background: var(--bg-sunken); padding: 24px; }
 .editor-side { border-left: 1px solid var(--border); overflow: auto; padding: 18px; background: #fff; }
 .editor-frame { width: 100%; max-width: 680px; margin: 0 auto; background: #fff; border: 1px solid var(--border); min-height: 400px; }

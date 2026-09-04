@@ -21,7 +21,7 @@ export default function Stats() {
     <>
       <h1>통계</h1>
       <div className="panel" style={{ marginBottom: 20 }}>
-        <div className="row">
+        <div className="row fill">
           <label className="field" style={{ marginBottom: 0 }}>
             <span>시작일</span>
             <input type="date" value={filters.from} onChange={(e) => setFilters({ ...filters, from: e.target.value })} />
