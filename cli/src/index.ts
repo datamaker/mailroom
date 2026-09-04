@@ -6,7 +6,10 @@ import { loginCommand } from './commands/login.js';
 import { listsCommand } from './commands/lists.js';
 import { subscribersCommand } from './commands/subscribers.js';
 import { campaignsCommand } from './commands/campaigns.js';
+import { templatesCommand } from './commands/templates.js';
+import { automationsCommand } from './commands/automations.js';
 import { statsCommand } from './commands/stats.js';
+import { doctorCommand } from './commands/doctor.js';
 import { mcpCommand } from './commands/mcp.js';
 
 const program = new Command();
@@ -20,7 +23,10 @@ program.addCommand(loginCommand());
 program.addCommand(listsCommand());
 program.addCommand(subscribersCommand());
 program.addCommand(campaignsCommand());
+program.addCommand(templatesCommand());
+program.addCommand(automationsCommand());
 program.addCommand(statsCommand());
+program.addCommand(doctorCommand());
 program.addCommand(mcpCommand());
 
 program.parseAsync(process.argv).catch((err) => {

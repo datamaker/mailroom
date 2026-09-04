@@ -141,6 +141,7 @@ export async function settingsRoutes(app: FastifyInstance) {
     sendProvider: config.send.provider,
     sesRegion: config.send.ses.region,
     rateLimit: config.send.rateLimit,
+    sendLocked: config.send.lock,
     ssoEnabled: config.oidc.enabled,
   }));
 }

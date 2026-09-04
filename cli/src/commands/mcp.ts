@@ -274,6 +274,105 @@ function registerTools(server: McpServer) {
   );
 
   server.tool(
+    'mailroom_templates',
+    '저장된 템플릿 목록. 이메일을 만들 때 서식으로 쓴다.',
+    {},
+    async () => ok(await api('/api/templates'))
+  );
+
+  server.tool(
+    'mailroom_campaign_apply_template',
+    '작성 중인 이메일에 템플릿을 입힌다. 지금 내용은 템플릿 내용으로 덮어써진다.',
+    { campaignId: z.string(), templateId: z.string() },
+    async ({ campaignId, templateId }) =>
+      ok(await api(`/api/campaigns/${campaignId}/apply-template`, { method: 'POST', body: { templateId } }))
+  );
+
+  server.tool(
+    'mailroom_automations',
+    '자동 이메일 목록 — 구독·오픈·클릭 같은 사건에 반응해 한 명씩 나가는 메일.',
+    {},
+    async () => {
+      const r = await api<any>('/api/campaigns', { query: { limit: 100 } });
+      return ok({ automations: r.campaigns.filter((c: any) => c.type === 'automation') });
+    }
+  );
+
+  server.tool(
+    'mailroom_automation_create',
+    [
+      '자동 이메일을 만든다(꺼진 상태). 발동 조건은 trigger 로 준다.',
+      "type: 'subscribe'(구독했을 때) | 'campaign_opened' | 'campaign_not_opened' | 'campaign_clicked' | 'field_date'.",
+      'campaign_* 는 기준이 될 campaignId 가 필요하고, delayMinutes 로 얼마나 기다렸다 보낼지 정한다.',
+    ].join(' '),
+    {
+      listId: z.string(),
+      subject: z.string(),
+      markdown: z.string().describe('본문 마크다운'),
+      trigger: z
+        .object({
+          type: z.enum(['subscribe', 'campaign_opened', 'campaign_not_opened', 'campaign_clicked', 'field_date']),
+          delayMinutes: z.number().optional(),
+          campaignId: z.string().optional(),
+          key: z.string().optional().describe("field_date 가 볼 날짜 필드 key"),
+          offsetDays: z.number().optional(),
+          sendHour: z.number().optional(),
+          yearly: z.boolean().optional(),
+        })
+        .describe('발동 조건'),
+      senderName: z.string().optional(),
+      senderEmail: z.string().optional(),
+    },
+    async (args) => {
+      const content = wrapNewsletter(markdownToBlocks(args.markdown));
+      const created = await api<any>('/api/campaigns', {
+        method: 'POST',
+        body: {
+          list_id: args.listId,
+          subject: args.subject,
+          sender_name: args.senderName,
+          sender_email: args.senderEmail,
+          content,
+        },
+      });
+      return ok(
+        await api(`/api/campaigns/${created.campaign.id}`, {
+          method: 'PATCH',
+          body: { type: 'automation', trigger: args.trigger },
+        })
+      );
+    }
+  );
+
+  server.tool(
+    'mailroom_automation_activate',
+    [
+      '자동 이메일을 켠다. 켠 시점 이후에 조건이 맞는 사람에게만 나가므로 기존 구독자에게 소급 발송되지는 않지만,',
+      '켠 뒤로는 사람 확인 없이 계속 나간다. confirm 을 true 로 넘겨야 실행된다.',
+    ].join(' '),
+    { campaignId: z.string(), confirm: z.boolean().describe('사람이 켜는 것을 승인했을 때만 true') },
+    async ({ campaignId, confirm }) => {
+      if (!confirm) return fail('켜지 않았습니다. 사람에게 확인받은 뒤 confirm: true 로 다시 호출하세요.');
+      return ok(await api(`/api/campaigns/${campaignId}/activate`, { method: 'POST' }));
+    }
+  );
+
+  server.tool(
+    'mailroom_automation_deactivate',
+    '자동 이메일을 끈다. 이미 예약된 건도 나가지 않는다.',
+    { campaignId: z.string() },
+    async ({ campaignId }) => ok(await api(`/api/campaigns/${campaignId}/deactivate`, { method: 'POST' }))
+  );
+
+  server.tool(
+    'mailroom_automation_runs',
+    '자동 이메일이 누구에게 언제 나갔는지, 예약·건너뜀·실패 현황.',
+    { campaignId: z.string(), limit: z.number().optional() },
+    async ({ campaignId, limit }) =>
+      ok(await api(`/api/campaigns/${campaignId}/runs`, { query: { limit: limit ?? 30 } }))
+  );
+
+  server.tool(
     'mailroom_campaign_stats',
     '발송 통계 — 발송성공/오픈/클릭/수신거부, 시간별 추이, 많이 클릭한 링크, 오픈 환경.',
     { campaignId: z.string() },
