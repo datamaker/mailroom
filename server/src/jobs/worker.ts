@@ -98,11 +98,13 @@ async function promoteScheduled() {
 
 /** 워커가 죽어 'sending'에 갇힌 수신자를 되돌린다. */
 async function reapStuckRecipients() {
+  // sending_at 기준이어야 한다 — created_at 은 발송 준비 시각이라 긴 발송에서
+  // 정상 진행 중인 배치까지 되돌려 같은 사람에게 두 번 나간다.
   await query(
     `update campaign_recipients
-        set status = 'queued'
-      where status = 'sending' and created_at < now() - interval '15 minutes'
-        and sent_at is null`
+        set status = 'queued', sending_at = null
+      where status = 'sending' and sent_at is null
+        and coalesce(sending_at, created_at) < now() - interval '15 minutes'`
   );
   await query(
     `update send_jobs set status = 'pending', locked_at = null, locked_by = null

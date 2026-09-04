@@ -180,7 +180,7 @@ export async function sendCampaignBatch(campaignId: string, batchSize = config.s
     );
     if (rows.length) {
       await client.query(
-        `update campaign_recipients set status = 'sending' where id = any($1::bigint[])`,
+        `update campaign_recipients set status = 'sending', sending_at = now() where id = any($1::bigint[])`,
         [rows.map((r) => r.id)]
       );
     }
