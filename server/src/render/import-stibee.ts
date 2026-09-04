@@ -152,10 +152,26 @@ function buttonBlock(cta: HTMLElement): Block {
   } as Block;
 }
 
-function innerOf(el: HTMLElement | null) {
+/**
+ * 상자 안의 실제 내용만 꺼낸다.
+ * 스티비 마크업은 텍스트를 table > tbody > tr > td 로 감싸는데, 그걸 그대로 가져오면
+ * 우리 렌더러의 <div> 안에 <tbody> 가 들어가 유효하지 않은 HTML 이 된다(브라우저가
+ * 태그를 버리면서 td 에 걸린 스타일도 같이 날아간다). 껍데기를 벗기고 내용만 쓴다.
+ */
+function innerOf(el: HTMLElement | null): string {
   if (!el) return '';
-  // 스티비는 텍스트를 <p> 로 감싸 두므로 그대로 쓰면 우리 렌더러에서도 같은 모양이 난다.
-  return el.innerHTML.trim();
+  let node: HTMLElement = el;
+  for (let depth = 0; depth < 6; depth++) {
+    const children = node.childNodes.filter(
+      (c: any) => c.nodeType === 1 || (c.nodeType === 3 && String(c.rawText ?? '').trim())
+    );
+    if (children.length !== 1) break;
+    const only = children[0] as HTMLElement;
+    if (!only.tagName) break;
+    if (!['TABLE', 'TBODY', 'THEAD', 'TR', 'TD', 'TH'].includes(only.tagName.toUpperCase())) break;
+    node = only;
+  }
+  return node.innerHTML.trim();
 }
 
 function text(el: HTMLElement | null) {
