@@ -23,6 +23,7 @@ const PUBLIC_PREFIXES = [
   '/w/',
   '/s/',
   '/c/',
+  '/a/',
   '/api/public/',
   '/api/webhooks/',
 ];

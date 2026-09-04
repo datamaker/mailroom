@@ -5,6 +5,7 @@ import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
+import multipart from '@fastify/multipart';
 
 import { assertProductionConfig, config } from './config.js';
 import { migrate } from './db/migrate.js';
@@ -22,6 +23,7 @@ import { statsRoutes } from './routes/stats.js';
 import { publicRoutes } from './routes/public.js';
 import { webhookRoutes } from './routes/webhooks.js';
 import { compatRoutes } from './routes/compat.js';
+import { assetRoutes } from './routes/assets.js';
 import { startWorker, stopWorker } from './jobs/worker.js';
 import { purgeExpiredSessions } from './auth/service.js';
 
@@ -39,6 +41,8 @@ async function main() {
 
   await app.register(cookie);
   await app.register(cors, { origin: true, credentials: true });
+  // 이미지 업로드. 본문 자체는 bodyLimit 과 별개로 여기서 제한한다.
+  await app.register(multipart, { limits: { fileSize: 5 * 1024 * 1024, files: 1 } });
 
   // 구독폼/수신거부는 일반 form POST 로 들어온다 — Fastify 기본 파서엔 없다.
   app.addContentTypeParser(
@@ -85,6 +89,7 @@ async function main() {
   await app.register(publicRoutes);
   await app.register(webhookRoutes);
   await app.register(compatRoutes);
+  await app.register(assetRoutes);
 
   // 빌드된 web 을 같은 프로세스에서 서빙한다 (lookout 과 같은 배포 형태).
   const webDist = join(here, '../../web/dist');

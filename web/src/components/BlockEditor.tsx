@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { api } from '../api';
 
 export const BLOCK_LABELS: Record<string, string> = {
   webview: '웹에서 보기',
@@ -43,6 +44,71 @@ export function newBlock(type: string) {
     default:
       return { id, type };
   }
+}
+
+/** 이미지 주소 입력칸 + 파일 업로드. 외부 URL 을 그대로 쓸 수도 있다. */
+function ImageField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (url: string) => void;
+}) {
+  const input = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const upload = async (file: File) => {
+    setBusy(true);
+    setError('');
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch('/api/assets', { method: 'POST', body: form, credentials: 'include' });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.message ?? '업로드에 실패했습니다.');
+      onChange(json.asset.url);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+      if (input.current) input.current.value = '';
+    }
+  };
+
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <input value={value ?? ''} placeholder="https://… 또는 파일 올리기" onChange={(e) => onChange(e.target.value)} />
+      <div className="btn-row" style={{ marginTop: 6 }}>
+        <button type="button" className="btn sm" disabled={busy} onClick={() => input.current?.click()}>
+          {busy ? '올리는 중…' : '파일 올리기'}
+        </button>
+        {value ? (
+          <img
+            src={value}
+            alt=""
+            style={{ height: 30, borderRadius: 4, border: '1px solid var(--border)' }}
+            onError={(e) => ((e.target as HTMLImageElement).style.display = 'none')}
+          />
+        ) : null}
+      </div>
+      <input
+        ref={input}
+        type="file"
+        accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) upload(f);
+        }}
+      />
+      {error ? <div className="hint" style={{ color: 'var(--red)' }}>{error}</div> : null}
+      <div className="hint">5MB 이하 · PNG · JPEG · GIF · WebP · SVG</div>
+    </label>
+  );
 }
 
 interface Props {
@@ -190,7 +256,7 @@ function BlockFields({ block, onChange }: { block: any; onChange: (patch: Record
     case 'image':
       return (
         <>
-          {text('src', '이미지 주소', 'https://…')}
+          <ImageField label="이미지" value={block.src} onChange={(src) => onChange({ src })} />
           {text('alt', '대체 텍스트')}
           {text('href', '클릭 시 이동할 주소')}
           {align()}
@@ -208,7 +274,7 @@ function BlockFields({ block, onChange }: { block: any; onChange: (patch: Record
     case 'row':
       return (
         <>
-          {text('imageSrc', '이미지 주소')}
+          <ImageField label="이미지" value={block.imageSrc} onChange={(imageSrc) => onChange({ imageSrc })} />
           {text('imageHref', '이미지 링크')}
           <label className="field">
             <span>이미지 위치</span>
@@ -225,17 +291,15 @@ function BlockFields({ block, onChange }: { block: any; onChange: (patch: Record
         <>
           {(block.columns ?? []).map((col: any, i: number) => (
             <div key={i} style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
-              <label className="field">
-                <span>{i + 1}번째 칸 이미지</span>
-                <input
-                  value={col.imageSrc ?? ''}
-                  onChange={(e) => {
-                    const cols = [...block.columns];
-                    cols[i] = { ...col, imageSrc: e.target.value };
-                    onChange({ columns: cols });
-                  }}
-                />
-              </label>
+              <ImageField
+                label={`${i + 1}번째 칸 이미지`}
+                value={col.imageSrc ?? ''}
+                onChange={(imageSrc) => {
+                  const cols = [...block.columns];
+                  cols[i] = { ...col, imageSrc };
+                  onChange({ columns: cols });
+                }}
+              />
               <label className="field">
                 <span>{i + 1}번째 칸 텍스트</span>
                 <textarea
@@ -294,7 +358,7 @@ function BlockFields({ block, onChange }: { block: any; onChange: (patch: Record
     case 'video':
       return (
         <>
-          {text('thumbnail', '썸네일 이미지 주소')}
+          <ImageField label="썸네일" value={block.thumbnail} onChange={(thumbnail) => onChange({ thumbnail })} />
           {text('href', '영상 링크')}
           {text('title', '제목')}
         </>
@@ -302,7 +366,7 @@ function BlockFields({ block, onChange }: { block: any; onChange: (patch: Record
     case 'product':
       return (
         <>
-          {text('imageSrc', '상품 이미지')}
+          <ImageField label="상품 이미지" value={block.imageSrc} onChange={(imageSrc) => onChange({ imageSrc })} />
           {text('name', '상품명')}
           {text('price', '가격')}
           {text('href', '상품 링크')}
