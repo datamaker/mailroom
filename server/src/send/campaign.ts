@@ -79,17 +79,21 @@ export async function renderCampaign(
   return mergeTags(html, { fields: opts.sample, defaults, links: { unsubscribe: '#', preferences: '#', webview: '#' } });
 }
 
-/**
- * 발송 준비: 콘텐츠 스냅샷 + 링크 등록 + 수신자 확정.
- * 여기까지 끝나면 캠페인 내용을 바꿔도 이미 큐에 들어간 발송에는 영향이 없다.
- */
-export async function prepareCampaign(campaignId: string) {
-  const c = await getCampaign(campaignId);
+/** 발송 가능한 상태인지 확인한다. 일반 발송과 자동 이메일이 같은 기준을 쓴다. */
+export function assertReady(
+  c: CampaignRow
+): asserts c is CampaignRow & { list_id: string; sender_email: string } {
   if (!c.list_id) throw badRequest('주소록이 선택되지 않았습니다.');
   if (!c.sender_email) throw badRequest('발신자 이메일 주소가 없습니다.');
   if (!c.subject.trim()) throw badRequest('제목이 비어 있습니다.');
   if (!Array.isArray(c.content) || c.content.length === 0) throw badRequest('콘텐츠가 비어 있습니다.');
+}
 
+/**
+ * 콘텐츠를 발송용 HTML로 굳히고 추적 링크를 등록한다.
+ * 이 시점 이후 캠페인 본문을 고쳐도 이미 나간 메일에는 영향이 없다.
+ */
+export async function buildSendableHtml(c: CampaignRow) {
   const slug = c.public_slug || shortId(8);
   const footer = await listFooter(c.list_id);
 
@@ -116,7 +120,18 @@ export async function prepareCampaign(campaignId: string) {
   }
   if (c.track_opens) html = appendOpenPixel(html);
 
-  const text = renderPlainText(c.content);
+  return { html, slug, text: renderPlainText(c.content) };
+}
+
+/**
+ * 발송 준비: 콘텐츠 스냅샷 + 링크 등록 + 수신자 확정.
+ * 여기까지 끝나면 캠페인 내용을 바꿔도 이미 큐에 들어간 발송에는 영향이 없다.
+ */
+export async function prepareCampaign(campaignId: string) {
+  const c = await getCampaign(campaignId);
+  assertReady(c);
+
+  const { html, slug, text } = await buildSendableHtml(c);
 
   // 수신자 스냅샷. 여기서 확정된 명단으로만 나간다.
   const { where, params } = await buildAudienceQuery(c.list_id, c.target || {});

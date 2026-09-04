@@ -8,9 +8,12 @@ import { getCampaign, prefixAdSubject, renderCampaign, sendTestEmail } from '../
 import { renderEmailHtml } from '../render/html.js';
 import { usedTags } from '../render/merge.js';
 import { enqueue } from '../jobs/worker.js';
+import { TRIGGER_LABELS, scanAutomation, validateTrigger, type Trigger } from '../send/automation.js';
 
 const UPDATABLE = [
   'list_id',
+  'type',
+  'trigger',
   'name',
   'subject',
   'preheader',
@@ -27,7 +30,7 @@ const UPDATABLE = [
   'public_visibility',
 ];
 
-const JSON_COLUMNS = new Set(['content', 'styles', 'target']);
+const JSON_COLUMNS = new Set(['content', 'styles', 'target', 'trigger']);
 
 export async function campaignRoutes(app: FastifyInstance) {
   app.get('/api/campaigns', async (req) => {
@@ -304,6 +307,70 @@ export async function campaignRoutes(app: FastifyInstance) {
     );
     if (!campaign) throw badRequest('취소할 수 없는 상태입니다. 발송 중이면 먼저 일시중지하세요.');
     return { campaign };
+  });
+  // ---- 자동 이메일 ----
+
+  app.get('/api/automations/triggers', async () => ({
+    triggers: Object.entries(TRIGGER_LABELS).map(([type, label]) => ({ type, label })),
+  }));
+
+  app.post('/api/campaigns/:id/activate', async (req) => {
+    requireWrite(req);
+    const { id } = req.params as { id: string };
+    const c = await getCampaign(id);
+    if (!c.list_id) throw badRequest('주소록이 선택되지 않았습니다.');
+    if (!c.sender_email) throw badRequest('발신자 이메일 주소가 없습니다.');
+    if (!c.subject.trim()) throw badRequest('제목이 비어 있습니다.');
+    if (!Array.isArray(c.content) || !c.content.length) throw badRequest('콘텐츠가 비어 있습니다.');
+    validateTrigger((c as any).trigger as Trigger);
+
+    // activated_at 을 여기서 찍는다 — 이 시각 이후의 사건만 발동 대상이라,
+    // 켜자마자 기존 구독자 전원에게 나가는 사고를 구조적으로 막는다.
+    const campaign = await one<any>(
+      `update campaigns
+          set type = 'automation', status = 'active',
+              activated_at = coalesce(activated_at, now()), updated_at = now()
+        where id = $1 and status in ('draft','paused','active') returning *`,
+      [id]
+    );
+    if (!campaign) throw badRequest('활성화할 수 없는 상태입니다.');
+    const scheduled = await scanAutomation(campaign);
+    return { campaign, scheduled };
+  });
+
+  app.post('/api/campaigns/:id/deactivate', async (req) => {
+    requireWrite(req);
+    const { id } = req.params as { id: string };
+    const campaign = await one(
+      `update campaigns set status = 'paused', updated_at = now()
+        where id = $1 and type = 'automation' returning *`,
+      [id]
+    );
+    if (!campaign) throw badRequest('자동 이메일이 아닙니다.');
+    return { campaign };
+  });
+
+  /** 자동 이메일 실행 현황 */
+  app.get('/api/campaigns/:id/runs', async (req) => {
+    const { id } = req.params as { id: string };
+    const q = req.query as Record<string, string>;
+    const summary = await one(
+      `select count(*) filter (where status = 'scheduled')::int as scheduled,
+              count(*) filter (where status = 'sent')::int      as sent,
+              count(*) filter (where status = 'skipped')::int   as skipped,
+              count(*) filter (where status = 'failed')::int    as failed
+         from automation_runs where campaign_id = $1`,
+      [id]
+    );
+    const runs = await many(
+      `select r.id, r.status, r.scheduled_at, r.sent_at, r.error, s.email
+         from automation_runs r left join subscribers s on s.id = r.subscriber_id
+        where r.campaign_id = $1
+        order by coalesce(r.sent_at, r.scheduled_at) desc
+        limit ${Math.min(Number(q.limit) || 50, 500)}`,
+      [id]
+    );
+    return { summary, runs };
   });
 }
 

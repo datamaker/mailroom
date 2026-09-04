@@ -1,6 +1,7 @@
 import { config } from '../config.js';
 import { many, one, query } from '../db/pool.js';
 import { prepareCampaign, sendCampaignBatch } from '../send/campaign.js';
+import { scanAllAutomations, sendDueAutomations } from '../send/automation.js';
 import { randomToken } from '../lib/crypto.js';
 
 const WORKER_ID = `${process.pid}-${randomToken(4)}`;
@@ -159,6 +160,21 @@ export function startWorker() {
   loop();
   const reaper = setInterval(() => reapStuckRecipients().catch(() => {}), 60_000);
   reaper.unref?.();
+
+  // 자동 이메일은 큐가 아니라 주기 스캔으로 돈다 — 조건이 만족되는 시점을
+  // 미리 알 수 없기 때문이다. 스캔과 발송을 같은 틱에서 이어 처리한다.
+  const automation = setInterval(async () => {
+    try {
+      await scanAllAutomations();
+      const res = await sendDueAutomations();
+      if (res.sent || res.failed) {
+        console.log(`[automation] 발송 ${res.sent} · 건너뜀 ${res.skipped} · 실패 ${res.failed}`);
+      }
+    } catch (err) {
+      console.error('[automation] 루프 오류', err);
+    }
+  }, config.worker.automationPollMs);
+  automation.unref?.();
 }
 
 export function stopWorker() {

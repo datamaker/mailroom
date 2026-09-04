@@ -60,6 +60,8 @@ export const config = {
   worker: {
     enabled: bool(env.MAILROOM_WORKER, true),
     pollMs: int(env.MAILROOM_WORKER_POLL_MS, 2000),
+    /** 자동 이메일 조건 스캔 주기. 초 단위 정확도가 필요한 일이 아니다. */
+    automationPollMs: int(env.MAILROOM_AUTOMATION_POLL_MS, 60_000),
   },
 } as const;
 
