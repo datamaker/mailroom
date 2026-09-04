@@ -295,7 +295,7 @@ function ContentTab({ c, patch }: { c: any; patch: (f: Record<string, any>) => v
   }, [JSON.stringify(blocks), JSON.stringify(c.styles)]);
 
   return (
-    <div className="editor" style={{ margin: '-28px -32px 0', height: 'calc(100vh - 190px)' }}>
+    <div className="editor">
       <div className="editor-canvas">
         <iframe className="editor-frame" srcDoc={html} title="미리보기" style={{ height: '100%', border: 0 }} />
       </div>

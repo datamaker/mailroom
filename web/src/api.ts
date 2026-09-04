@@ -49,6 +49,7 @@ export function pct(n: number | null | undefined) {
 
 export const STATUS_LABEL: Record<string, string> = {
   draft: '작성중',
+  active: '실행중',
   scheduled: '예약됨',
   sending: '발송중',
   sent: '발송완료',
