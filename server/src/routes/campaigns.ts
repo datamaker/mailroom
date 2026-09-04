@@ -155,6 +155,23 @@ export async function campaignRoutes(app: FastifyInstance) {
     return { campaign };
   });
 
+  /** 템플릿 내용을 이메일에 적용 (스티비 마법사의 "템플릿" 단계) */
+  app.post('/api/campaigns/:id/apply-template', async (req) => {
+    requireWrite(req);
+    const { id } = req.params as { id: string };
+    const b = (req.body ?? {}) as { templateId?: string };
+    if (!b.templateId) throw badRequest('templateId가 필요합니다.');
+    const t = await one<any>('select content, styles from templates where id = $1', [b.templateId]);
+    if (!t) throw notFound('템플릿을 찾을 수 없습니다.');
+    const campaign = await one(
+      `update campaigns set content = $2::jsonb, styles = $3::jsonb, updated_at = now()
+        where id = $1 and status in ('draft','paused') returning *`,
+      [id, JSON.stringify(t.content), JSON.stringify(t.styles ?? {})]
+    );
+    if (!campaign) throw badRequest('작성 중인 이메일에만 적용할 수 있습니다.');
+    return { campaign };
+  });
+
   app.post('/api/campaigns/:id/duplicate', async (req) => {
     requireWrite(req);
     const { id } = req.params as { id: string };

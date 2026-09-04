@@ -236,14 +236,42 @@ export async function subscriberRoutes(app: FastifyInstance) {
       const mapped: Record<string, unknown> = {};
       let email = '';
       let adAgreed: boolean | undefined;
+      let status: 'subscribed' | 'unsubscribed' | 'deleted' | undefined;
+      let subscribedAt: string | undefined;
+      let groupNames: string[] = [];
+      let source: string | undefined;
 
-      for (const [header, value] of Object.entries(row)) {
-        const key = b.mapping?.[header] ?? byKey.get(header) ?? byLabel.get(header.trim());
-        if (!key) {
-          if (['이메일', '이메일 주소', 'email'].includes(header.trim().toLowerCase())) email = value;
-          if (['광고성 정보 수신 동의', 'ad_agreed'].includes(header.trim())) adAgreed = /^(y|yes|true|1)$/i.test(value);
+      for (const [rawHeader, value] of Object.entries(row)) {
+        const header = rawHeader.trim();
+        // 스티비 내보내기의 시스템 열은 사용자 정의 필드가 아니라 구독자 속성으로 받는다.
+        const system = SYSTEM_HEADERS[header] ?? SYSTEM_HEADERS[header.toLowerCase()];
+        if (system) {
+          switch (system) {
+            case 'email':
+              email = value;
+              break;
+            case 'status':
+              status = STATUS_MAP[value.trim()];
+              break;
+            case 'ad_agreed':
+              adAgreed = /^(y|yes|true|1|동의)/i.test(value.trim());
+              break;
+            case 'groups':
+              groupNames = value.split('|').map((g) => g.trim()).filter(Boolean);
+              break;
+            case 'subscribed_at':
+              subscribedAt = value.trim() || undefined;
+              break;
+            case 'source':
+              source = value.trim() || undefined;
+              break;
+            case 'ignore':
+              break;
+          }
           continue;
         }
+        const key = b.mapping?.[header] ?? byKey.get(header) ?? byLabel.get(header);
+        if (!key) continue;
         if (key === 'email') email = value;
         else mapped[key] = value;
       }
@@ -253,8 +281,11 @@ export async function subscriberRoutes(app: FastifyInstance) {
           email,
           fields: mapped,
           adAgreed,
+          status,
+          subscribedAt,
+          groupNames,
           groupIds: b.groupIds,
-          source: 'import',
+          source: source ? `import:${source}` : 'import',
           by: 'MANUAL',
           clearEmpty: b.clearEmpty ?? false,
         })
@@ -263,6 +294,40 @@ export async function subscriberRoutes(app: FastifyInstance) {
     return summarize(results);
   });
 }
+
+/**
+ * 스티비 CSV 내보내기의 고정 열 이름 → 구독자 속성.
+ * 이 열들은 사용자 정의 필드로 만들면 안 된다 (상태를 필드에 넣으면 수신거부가 무시된다).
+ */
+const SYSTEM_HEADERS: Record<string, string> = {
+  '이메일 주소': 'email',
+  이메일: 'email',
+  email: 'email',
+  '이메일 수신 상태': 'status',
+  상태: 'status',
+  status: 'status',
+  '광고성 정보 수신 동의': 'ad_agreed',
+  ad_agreed: 'ad_agreed',
+  그룹: 'groups',
+  groups: 'groups',
+  구독일: 'subscribed_at',
+  subscribed_date: 'subscribed_at',
+  '추가 경로': 'source',
+  '마지막 업데이트일': 'ignore',
+  '구독 해지 사유': 'ignore',
+};
+
+const STATUS_MAP: Record<string, 'subscribed' | 'unsubscribed' | 'deleted'> = {
+  '구독 중': 'subscribed',
+  구독중: 'subscribed',
+  subscribed: 'subscribed',
+  수신거부: 'unsubscribed',
+  '수신 거부': 'unsubscribed',
+  unsubscribed: 'unsubscribed',
+  자동삭제: 'deleted',
+  '자동 삭제': 'deleted',
+  deleted: 'deleted',
+};
 
 function stripReserved(s: Record<string, any>) {
   const { email, ad_agreed, adAgreed, groupIds, status, ...rest } = s;

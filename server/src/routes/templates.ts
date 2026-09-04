@@ -3,6 +3,7 @@ import { many, one, query } from '../db/pool.js';
 import { badRequest, notFound } from '../lib/errors.js';
 import { currentUserId, requireWrite } from '../auth/plugin.js';
 import { renderEmailHtml } from '../render/html.js';
+import { importStibeeHtml } from '../render/import-stibee.js';
 
 export async function templateRoutes(app: FastifyInstance) {
   app.get('/api/templates', async () => ({
@@ -49,6 +50,20 @@ export async function templateRoutes(app: FastifyInstance) {
       [b.name || c.subject || '이름 없는 템플릿', JSON.stringify(c.content), JSON.stringify(c.styles), currentUserId(req)]
     );
     return { template };
+  });
+
+  /** 스티비에서 내보낸 HTML 을 블록으로 되돌려 템플릿으로 저장 */
+  app.post('/api/templates/import', async (req) => {
+    requireWrite(req);
+    const b = (req.body ?? {}) as Record<string, any>;
+    if (!b.html) throw badRequest('html 본문이 필요합니다.');
+    const { blocks, rawCount, images } = importStibeeHtml(b.html);
+    if (!blocks.length) throw badRequest('상자를 하나도 인식하지 못했습니다.');
+    const template = await one(
+      `insert into templates (name, content, created_by) values ($1, $2::jsonb, $3) returning *`,
+      [b.name || '가져온 템플릿', JSON.stringify(blocks), currentUserId(req)]
+    );
+    return { template, stats: { blocks: blocks.length, rawCount, images: images.length } };
   });
 
   app.patch('/api/templates/:id', async (req) => {
