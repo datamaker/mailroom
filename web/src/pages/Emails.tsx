@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, fmtDate, fmtNum } from '../api';
 import { Badge, Empty, Modal, Rate } from '../components/ui';
+import { PreviewModal } from './Templates';
 
 export default function Emails() {
   const nav = useNavigate();
@@ -9,6 +10,7 @@ export default function Emails() {
   const [lists, setLists] = useState<any[]>([]);
   const [filters, setFilters] = useState({ status: 'all', listId: '', q: '' });
   const [creating, setCreating] = useState(false);
+  const [deleting, setDeleting] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = () => {
@@ -103,6 +105,14 @@ export default function Emails() {
                     }}
                   >
                     복사
+                  </button>{' '}
+                  <button
+                    className="btn sm danger"
+                    disabled={c.status === 'sending'}
+                    title={c.status === 'sending' ? '발송 중에는 삭제할 수 없습니다' : ''}
+                    onClick={() => setDeleting(c)}
+                  >
+                    삭제
                   </button>
                 </td>
               </tr>
@@ -119,31 +129,53 @@ export default function Emails() {
       </div>
 
       {creating ? <CreateModal lists={lists} onClose={() => setCreating(false)} /> : null}
+      {deleting ? (
+        <DeleteCampaignModal
+          campaign={deleting}
+          onClose={() => setDeleting(null)}
+          onDone={() => {
+            setDeleting(null);
+            load();
+          }}
+        />
+      ) : null}
     </>
   );
 }
+
+const BLANK = [
+  { id: 'webview', type: 'webview' },
+  { id: 'text1', type: 'text', html: '<p>여기에 내용을 작성하세요.</p>' },
+  { id: 'footer', type: 'footer' },
+];
 
 function CreateModal({ lists, onClose }: { lists: any[]; onClose: () => void }) {
   const nav = useNavigate();
   const [subject, setSubject] = useState('');
   const [listId, setListId] = useState(lists[0]?.id ?? '');
+  const [templateId, setTemplateId] = useState('');
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [previewing, setPreviewing] = useState<any | null>(null);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api('/api/templates').then((r: any) => setTemplates(r.templates));
+  }, []);
 
   const submit = async () => {
     setBusy(true);
     try {
       const r: any = await api('/api/campaigns', {
         method: 'POST',
-        body: {
-          subject,
-          list_id: listId || null,
-          content: [
-            { id: 'webview', type: 'webview' },
-            { id: 'text1', type: 'text', html: '<p>여기에 내용을 작성하세요.</p>' },
-            { id: 'footer', type: 'footer' },
-          ],
-        },
+        body: { subject, list_id: listId || null, content: templateId ? [] : BLANK },
       });
+      // 템플릿은 만든 뒤에 입힌다 — 서식과 스타일을 함께 가져오기 위해.
+      if (templateId) {
+        await api(`/api/campaigns/${r.campaign.id}/apply-template`, {
+          method: 'POST',
+          body: { templateId },
+        });
+      }
       nav(`/emails/${r.campaign.id}/edit`);
     } finally {
       setBusy(false);
@@ -166,12 +198,89 @@ function CreateModal({ lists, onClose }: { lists: any[]; onClose: () => void }) 
           ))}
         </select>
       </label>
+      <label className="field">
+        <span>템플릿</span>
+        <select value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
+          <option value="">빈 이메일로 시작</option>
+          {templates.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name} (상자 {t.block_count}개)
+            </option>
+          ))}
+        </select>
+        {templateId ? (
+          <button
+            className="btn sm"
+            style={{ marginTop: 8 }}
+            onClick={() => setPreviewing(templates.find((t) => t.id === templateId))}
+          >
+            템플릿 미리보기
+          </button>
+        ) : (
+          <div className="hint">
+            템플릿은 <Link to="/templates">템플릿</Link> 화면에서 만들 수 있습니다.
+          </div>
+        )}
+      </label>
       <div className="btn-row" style={{ justifyContent: 'flex-end' }}>
         <button className="btn" onClick={onClose}>
           취소
         </button>
         <button className="btn primary" disabled={!subject || busy} onClick={submit}>
           만들기
+        </button>
+      </div>
+      {previewing ? <PreviewModal template={previewing} onClose={() => setPreviewing(null)} /> : null}
+    </Modal>
+  );
+}
+
+function DeleteCampaignModal({
+  campaign,
+  onClose,
+  onDone,
+}: {
+  campaign: any;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const sent = campaign.status === 'sent';
+
+  return (
+    <Modal title="이메일 삭제" onClose={onClose}>
+      <p>
+        <strong>{campaign.subject || '(제목 없음)'}</strong> 을(를) 삭제할까요?
+      </p>
+      {sent ? (
+        <div className="warn-box">
+          이미 발송한 이메일입니다. 삭제하면 <b>발송 통계와 수신자 기록도 같이 사라집니다.</b>
+          {' '}이미 나간 메일의 추적 링크와 수신거부 링크도 동작하지 않게 됩니다.
+        </div>
+      ) : null}
+      {error ? <div className="error-box">{error}</div> : null}
+      <div className="btn-row" style={{ justifyContent: 'flex-end' }}>
+        <button className="btn" onClick={onClose}>
+          취소
+        </button>
+        <button
+          className="btn danger"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            setError('');
+            try {
+              await api(`/api/campaigns/${campaign.id}`, { method: 'DELETE' });
+              onDone();
+            } catch (err: any) {
+              setError(err.message);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          삭제하기
         </button>
       </div>
     </Modal>

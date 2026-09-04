@@ -8,7 +8,9 @@ import { importStibeeHtml } from '../render/import-stibee.js';
 export async function templateRoutes(app: FastifyInstance) {
   app.get('/api/templates', async () => ({
     templates: await many(
-      'select id, name, is_builtin, created_at, updated_at from templates order by is_builtin desc, updated_at desc'
+      `select id, name, is_builtin, created_at, updated_at,
+              jsonb_array_length(content) as block_count
+         from templates order by is_builtin desc, updated_at desc`
     ),
   }));
 

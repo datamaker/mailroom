@@ -8,6 +8,7 @@ import CampaignEditor from './pages/CampaignEditor';
 import CampaignStats from './pages/CampaignStats';
 import Lists from './pages/Lists';
 import ListDetail from './pages/ListDetail';
+import Templates from './pages/Templates';
 import Stats from './pages/Stats';
 import Settings from './pages/Settings';
 
@@ -56,6 +57,7 @@ export default function App() {
         <Route path="/emails" element={<Emails />} />
         <Route path="/emails/:id" element={<CampaignStats />} />
         <Route path="/emails/:id/edit" element={<CampaignEditor />} />
+        <Route path="/templates" element={<Templates />} />
         <Route path="/lists" element={<Lists />} />
         <Route path="/lists/:id" element={<ListDetail />} />
         <Route path="/stats" element={<Stats />} />

@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { Modal } from '../components/ui';
 import { BlockEditor, newBlock, BLOCK_LABELS } from '../components/BlockEditor';
+import { PreviewModal } from './Templates';
 
 type Tab = 'settings' | 'content' | 'send';
 
@@ -16,6 +17,7 @@ export default function CampaignEditor() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [templateOpen, setTemplateOpen] = useState(false);
   const dirty = useRef(false);
 
   useEffect(() => {
@@ -84,6 +86,9 @@ export default function CampaignEditor() {
         <span className="faint">
           {saving ? '저장 중…' : savedAt ? `저장됨 ${savedAt.toLocaleTimeString('ko-KR')}` : ''}
         </span>
+        <button className="btn sm" onClick={() => setTemplateOpen(true)}>
+          템플릿
+        </button>
         <button className="btn sm" onClick={save} disabled={saving}>
           저장
         </button>
@@ -111,7 +116,119 @@ export default function CampaignEditor() {
       {tab === 'settings' ? <SettingsTab c={c} lists={lists} senders={senders} patch={patch} /> : null}
       {tab === 'content' ? <ContentTab c={c} patch={patch} /> : null}
       {tab === 'send' ? <SendTab c={c} save={save} onSent={() => nav(`/emails/${c.id}`)} /> : null}
+
+      {templateOpen ? (
+        <TemplateModal
+          campaign={c}
+          onClose={() => setTemplateOpen(false)}
+          onApplied={(content, styles) => {
+            patch({ content, styles });
+            setTemplateOpen(false);
+            setTab('content');
+          }}
+        />
+      ) : null}
     </>
+  );
+}
+
+/** 템플릿을 이 이메일에 입히거나, 지금 내용을 템플릿으로 저장한다. */
+function TemplateModal({
+  campaign,
+  onClose,
+  onApplied,
+}: {
+  campaign: any;
+  onClose: () => void;
+  onApplied: (content: any[], styles: any) => void;
+}) {
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [selected, setSelected] = useState('');
+  const [previewing, setPreviewing] = useState<any | null>(null);
+  const [saveName, setSaveName] = useState(campaign.subject || '');
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const load = () => api('/api/templates').then((r: any) => setTemplates(r.templates));
+  useEffect(() => {
+    load();
+  }, []);
+
+  return (
+    <Modal title="템플릿" onClose={onClose}>
+      <h3 style={{ marginTop: 0 }}>템플릿 적용하기</h3>
+      <div className="hint" style={{ marginBottom: 8 }}>
+        지금 작성한 내용은 사라지고 템플릿 내용으로 바뀝니다.
+      </div>
+      <label className="field">
+        <select value={selected} onChange={(e) => setSelected(e.target.value)}>
+          <option value="">선택하세요</option>
+          {templates.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name} (상자 {t.block_count}개)
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className="btn-row">
+        <button className="btn sm" disabled={!selected} onClick={() => setPreviewing(templates.find((t) => t.id === selected))}>
+          미리보기
+        </button>
+        <button
+          className="btn sm primary"
+          disabled={!selected || busy}
+          onClick={async () => {
+            if (!confirm('지금 내용을 템플릿으로 덮어씁니다. 계속할까요?')) return;
+            setBusy(true);
+            try {
+              const r: any = await api(`/api/campaigns/${campaign.id}/apply-template`, {
+                method: 'POST',
+                body: { templateId: selected },
+              });
+              onApplied(r.campaign.content, r.campaign.styles);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          적용하기
+        </button>
+      </div>
+
+      <h3 style={{ borderTop: '1px solid var(--border)', paddingTop: 16, marginTop: 20 }}>
+        지금 내용을 템플릿으로 저장
+      </h3>
+      <label className="field">
+        <input value={saveName} onChange={(e) => setSaveName(e.target.value)} placeholder="템플릿 이름" />
+      </label>
+      {msg ? <div className="ok-box">{msg}</div> : null}
+      <div className="btn-row" style={{ justifyContent: 'space-between' }}>
+        <button
+          className="btn sm"
+          disabled={!saveName || busy}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              await api(`/api/templates/from-campaign/${campaign.id}`, {
+                method: 'POST',
+                body: { name: saveName },
+              });
+              setMsg(`"${saveName}" 템플릿으로 저장했습니다.`);
+              load();
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          템플릿으로 저장
+        </button>
+        <button className="btn" onClick={onClose}>
+          닫기
+        </button>
+      </div>
+
+      {previewing ? <PreviewModal template={previewing} onClose={() => setPreviewing(null)} /> : null}
+    </Modal>
   );
 }
 

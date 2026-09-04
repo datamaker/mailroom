@@ -9,6 +9,7 @@ interface Props {
 const NAV = [
   { to: '/', label: '대시보드', exact: true },
   { to: '/emails', label: '이메일' },
+  { to: '/templates', label: '템플릿' },
   { to: '/lists', label: '주소록' },
   { to: '/stats', label: '통계' },
   { to: '/settings', label: '설정' },
