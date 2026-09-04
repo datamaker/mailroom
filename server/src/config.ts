@@ -15,8 +15,18 @@ export const config = {
   host: env.HOST || '0.0.0.0',
   databaseUrl: env.DATABASE_URL || 'postgres://mailroom:mailroom@localhost:5436/mailroom',
 
-  /** 링크·픽셀·구독폼에 박히는 공개 주소. 프로덕션에서 반드시 설정. */
+  /** 링크·픽셀·구독폼에 박히는 공개 주소. 구독자가 여는 주소라 인터넷에서 열려야 한다. */
   publicUrl: (env.MAILROOM_PUBLIC_URL || `http://localhost:${int(env.PORT, 9200)}`).replace(/\/$/, ''),
+
+  /**
+   * 관리 UI 주소. SSO 리다이렉트와 로그인 후 이동에 쓴다.
+   * 공개 주소와 나누는 이유: 관리 화면은 VPN 뒤에 두고 추적 링크만 공개하기 때문에
+   * OIDC 콜백을 공개 도메인으로 잡으면 그쪽 vhost 에서 404 가 난다.
+   */
+  adminUrl: (env.MAILROOM_ADMIN_URL || env.MAILROOM_PUBLIC_URL || `http://localhost:${int(env.PORT, 9200)}`).replace(
+    /\/$/,
+    ''
+  ),
 
   /** 추적 토큰·세션 서명용. 미설정 시 부팅할 때마다 링크가 무효화된다. */
   secret: env.MAILROOM_SECRET || '',

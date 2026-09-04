@@ -23,7 +23,7 @@ export async function initOidc() {
 }
 
 export function redirectUri() {
-  return `${config.publicUrl}/api/auth/oidc/callback`;
+  return `${config.adminUrl}/api/auth/oidc/callback`;
 }
 
 export interface OidcStart {

@@ -94,7 +94,7 @@ export function setSessionCookie(reply: FastifyReply, token: string, expiresAt: 
   reply.setCookie(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: config.publicUrl.startsWith('https'),
+    secure: config.adminUrl.startsWith('https'),
     path: '/',
     expires: expiresAt,
   });

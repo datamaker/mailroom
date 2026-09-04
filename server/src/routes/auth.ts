@@ -39,7 +39,7 @@ export async function authRoutes(app: FastifyInstance) {
     if (!entry) throw badRequest('로그인 세션이 만료되었습니다. 다시 시도해 주세요.');
     pending.delete(q.state);
 
-    const currentUrl = new URL(`${config.publicUrl}${req.url}`);
+    const currentUrl = new URL(`${config.adminUrl}${req.url}`);
     const identity = await handleCallback(currentUrl, q.state, entry.verifier);
     const user = await upsertUserFromSso(identity.email, identity.name);
     const session = await createSession(user.id);

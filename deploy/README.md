@@ -10,9 +10,11 @@ mailroom 은 한 프로세스지만 **두 개의 얼굴**이 필요하다.
 | 그 외 전부 (관리 UI, `/api/*`, `/v1/*`) | 직원, CLI | VPN 뒤 |
 
 공개 경로를 VPN 뒤에 두면 이미 보낸 메일의 오픈 추적·클릭·수신거부 링크가 전부 죽는다.
-`opentunnel-nlb` 에 TCP 리스너를 하나 더 붙여 `mailroom-public` 타깃그룹 → 인스턴스 `:8444`
-로 보내고, `mailroom-public.conf` 가 그 포트를 default_server 로 받는다
-(gatehouse 의 `auth-public.conf` 가 `:8443` 을 쓰는 것과 같은 패턴).
+**NLB 를 새로 만들거나 리스너를 추가할 필요는 없다.** `opentunnel-nlb` 의 TCP :443 이
+이미 인스턴스 `:8443` 으로 오고 있고, TCP 패스스루라 SNI 가 nginx 까지 그대로 온다.
+gatehouse 가 그 포트의 `default_server` 이므로, `server_name mail.datasee.co.kr` 을 명시한
+블록을 같은 :8443 에 얹으면 SNI 로 갈라진다. Route53 에 `mail.datasee.co.kr` A alias 를
+`auth.datasee.co.kr` 과 같은 NLB 로 걸어 주면 끝.
 
 `limit_req_zone` 은 nginx.conf 의 http 블록에 있어야 한다:
 

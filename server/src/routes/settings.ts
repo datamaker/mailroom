@@ -135,6 +135,7 @@ export async function settingsRoutes(app: FastifyInstance) {
 
   app.get('/api/settings', async () => ({
     publicUrl: config.publicUrl,
+    adminUrl: config.adminUrl,
     sendProvider: config.send.provider,
     sesRegion: config.send.ses.region,
     rateLimit: config.send.rateLimit,

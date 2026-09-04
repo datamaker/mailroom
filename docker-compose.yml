@@ -26,6 +26,7 @@ services:
     environment:
       DATABASE_URL: postgres://mailroom:${POSTGRES_PASSWORD:-mailroom}@postgres:5432/mailroom
       MAILROOM_PUBLIC_URL: ${MAILROOM_PUBLIC_URL:?추적·구독 링크에 박히는 공개 주소가 필요합니다}
+      MAILROOM_ADMIN_URL: ${MAILROOM_ADMIN_URL:-}
       MAILROOM_SECRET: ${MAILROOM_SECRET:?재시작해도 링크가 살아 있으려면 고정 시크릿이 필요합니다}
       MAILROOM_ADMIN_EMAILS: ${MAILROOM_ADMIN_EMAILS:-}
       OIDC_ISSUER: ${OIDC_ISSUER:-}
