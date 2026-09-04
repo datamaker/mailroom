@@ -27,8 +27,8 @@ export default function Templates() {
         </button>
       </div>
       <div className="hint" style={{ marginBottom: 16 }}>
-        이메일을 만들 때 고를 수 있는 서식입니다. 스티비에서 <b>HTML 내보내기(이메일 발송용)</b>로 받은 파일을
-        올리면 상자 단위로 되살려 그대로 편집할 수 있습니다.
+        이메일을 만들 때 고를 수 있는 서식입니다. 쓰던 뉴스레터 HTML 파일을 올리면 상자 단위로
+        되살려 그대로 편집할 수 있습니다.
       </div>
 
       <div className="panel" style={{ padding: 0 }}>
@@ -74,7 +74,7 @@ export default function Templates() {
             {!templates.length && !loading ? (
               <tr>
                 <td colSpan={4}>
-                  <Empty>템플릿이 없습니다. 스티비에서 받은 HTML을 올려보세요.</Empty>
+                  <Empty>템플릿이 없습니다. HTML을 올리거나, 이메일 편집 화면에서 저장해 보세요.</Empty>
                 </td>
               </tr>
             ) : null}
@@ -143,7 +143,8 @@ function ImportModal({ onClose }: { onClose: () => void }) {
           }}
         />
         <div className="hint">
-          스티비 &gt; 이메일 &gt; HTML 내보내기 &gt; <b>이메일 발송용</b>으로 받은 파일을 그대로 올리면 됩니다.
+          쓰던 뉴스레터의 <b>이메일 발송용 HTML</b>을 그대로 올리면 됩니다. 상자 구조가 남아 있으면
+          텍스트·이미지·버튼·2단 같은 블록으로 되살립니다.
         </div>
       </label>
       {html ? <div className="faint">{html.length.toLocaleString()}자 읽음</div> : null}

@@ -157,7 +157,7 @@ export async function campaignRoutes(app: FastifyInstance) {
     return { campaign };
   });
 
-  /** 템플릿 내용을 이메일에 적용 (스티비 마법사의 "템플릿" 단계) */
+  /** 템플릿 내용을 이메일에 적용 */
   app.post('/api/campaigns/:id/apply-template', async (req) => {
     requireWrite(req);
     const { id } = req.params as { id: string };
@@ -261,7 +261,7 @@ export async function campaignRoutes(app: FastifyInstance) {
     if (c.sender_email && !sender?.verified) issues.push(`발신자 ${c.sender_email} 이(가) 인증되지 않았습니다.`);
 
     // 푸터 상자가 없어도 텍스트 안에 $%unsubscribe%$ 가 있으면 된다.
-    // (스티비에서 가져온 콘텐츠는 푸터를 텍스트 상자로 갖고 있다)
+    // (가져온 콘텐츠는 푸터를 텍스트 상자로 갖고 있는 경우가 많다)
     const serialized = JSON.stringify(c.content ?? []);
     const hasUnsubscribe =
       serialized.includes('unsubscribe') || serialized.includes('"footer"');

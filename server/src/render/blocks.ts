@@ -1,5 +1,5 @@
 /**
- * 이메일 콘텐츠 모델. 스티비의 "상자"에 대응하는 블록 배열이며
+ * 이메일 콘텐츠 모델. 에디터의 "상자"에 대응하는 블록 배열이며
  * campaigns.content / templates.content 에 jsonb 로 그대로 저장된다.
  */
 
@@ -9,7 +9,7 @@ export type Padding = 'none' | 'narrow' | 'normal' | 'wide';
 export interface BlockBase {
   id: string;
   type: string;
-  /** 상자 단위 배경/여백 — 스티비의 "스타일" 패널에 해당 */
+  /** 상자 단위 배경/여백 — "스타일" 패널에 해당 */
   background?: string;
   paddingTop?: Padding;
   paddingBottom?: Padding;

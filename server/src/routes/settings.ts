@@ -25,7 +25,7 @@ export async function settingsRoutes(app: FastifyInstance) {
     return { sender };
   });
 
-  /** SPF/DKIM/DMARC 를 DNS에서 직접 확인한다 (스티비 발신자 관리의 새로고침). */
+  /** SPF/DKIM/DMARC 를 DNS 와 SES 에서 확인한다. */
   app.post('/api/senders/:id/verify', async (req) => {
     requireWrite(req);
     const { id } = req.params as { id: string };

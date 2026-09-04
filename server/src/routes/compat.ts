@@ -4,11 +4,11 @@ import { requireWrite } from '../auth/plugin.js';
 import { normalizeEmail, setStatus, upsertSubscriber } from '../lib/subscribers.js';
 
 /**
- * 스티비 v1 호환 API.
+ * 구독자 연동 v1 API.
  * 기존 연동(구독폼, 백엔드에서 구독자 추가)이 base URL 과 토큰만 바꾸면 그대로 붙도록,
- * 요청/응답 모양을 스티비와 맞춘다. 인증은 `AccessToken` 헤더(플러그인에서 처리).
+ * 흔한 뉴스레터 서비스의 v1 API 와 요청/응답 모양을 맞춘다. 인증은 `AccessToken` 헤더(플러그인에서 처리).
  *
- * 주소록 id 는 우리 쪽에서 uuid 이므로 스티비의 숫자 id 와는 다르다 — 이관 시 매핑이 필요하다.
+ * 주소록 id 는 uuid 이므로 숫자 id 를 쓰던 곳에서 옮겨올 땐 매핑이 필요하다.
  */
 export async function compatRoutes(app: FastifyInstance) {
   app.post('/v1/lists/:listId/subscribers', async (req) => {
@@ -44,7 +44,7 @@ export async function compatRoutes(app: FastifyInstance) {
       Error: null,
       Value: {
         success: results.filter((r) => r.result !== 'skipped').map((r) => r.email),
-        // 스티비도 실패 건을 사유와 함께 돌려준다.
+        // 실패 건은 사유와 함께 돌려준다.
         failure: results
           .filter((r) => r.result === 'skipped')
           .map((r) => ({ email: r.email, reason: r.reason })),

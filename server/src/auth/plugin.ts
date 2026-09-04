@@ -35,7 +35,7 @@ export async function authPlugin(app: FastifyInstance) {
     if (PUBLIC_PREFIXES.some((p) => url.startsWith(p))) return;
     if (!url.startsWith('/api/') && !url.startsWith('/v1/')) return; // 정적 자산
 
-    // 1) API 키 — CLI/서버 연동. 스티비 호환을 위해 AccessToken 헤더도 받는다.
+    // 1) API 키 — CLI/서버 연동. 외부 연동 호환을 위해 AccessToken 헤더도 받는다.
     const auth = req.headers.authorization;
     const accessToken = req.headers['accesstoken'] ?? req.headers['access-token'];
     const raw =

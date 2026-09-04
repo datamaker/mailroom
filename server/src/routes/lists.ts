@@ -5,7 +5,7 @@ import { slugify } from '../lib/slug.js';
 import { requireWrite } from '../auth/plugin.js';
 import { countAudience } from '../send/audience.js';
 
-/** 새 주소록에 기본으로 깔리는 필드 — 스티비의 기본 구성과 같다. */
+/** 새 주소록에 기본으로 깔리는 필드. */
 const DEFAULT_FIELDS = [
   { key: 'email', label: '이메일 주소', type: 'text', required: true, is_system: true, position: 0 },
   { key: 'name', label: '이름', type: 'text', required: false, is_system: true, position: 1 },

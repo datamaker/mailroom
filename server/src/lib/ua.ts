@@ -1,11 +1,11 @@
 export type UaInfo = { device: string; os: string; client: string };
 
-/** 통계의 "모바일 vs 데스크톱" 도넛을 채울 최소한의 분류. */
+/** 통계의 "모바일 vs 데스크톱"을 채울 최소한의 분류. */
 export function parseUserAgent(ua: string | undefined): UaInfo {
   const s = (ua || '').toLowerCase();
   if (!s) return { device: 'unknown', os: 'unknown', client: 'other' };
 
-  // Gmail 이미지 프록시는 UA에 기기 정보가 없다 — 스티비도 이걸 별도 항목으로 뺀다.
+  // Gmail 이미지 프록시는 UA에 기기 정보가 없다 — 별도 항목으로 뺀다.
   if (s.includes('googleimageproxy')) return { device: 'unknown', os: 'unknown', client: 'gmail' };
 
   let os = 'unknown';

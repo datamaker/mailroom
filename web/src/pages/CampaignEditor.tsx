@@ -64,7 +64,7 @@ export default function CampaignEditor() {
     }
   }, [c]);
 
-  // 스티비처럼 편집 중에는 조용히 자동 저장한다.
+  // 편집 중에는 조용히 자동 저장한다.
   useEffect(() => {
     if (!c) return;
     const t = setTimeout(() => {

@@ -151,7 +151,7 @@ export async function subscriberRoutes(app: FastifyInstance) {
     return { subscriber: sub, groups, activity };
   });
 
-  /** 단건/다건 추가. 스티비의 "직접 추가하기" + API 추가가 같은 경로를 쓴다. */
+  /** 단건/다건 추가. 화면의 "직접 추가하기"와 API 추가가 같은 경로를 쓴다. */
   app.post('/api/lists/:id/subscribers', async (req) => {
     requireWrite(req);
     const { id } = req.params as { id: string };
@@ -243,7 +243,7 @@ export async function subscriberRoutes(app: FastifyInstance) {
 
       for (const [rawHeader, value] of Object.entries(row)) {
         const header = rawHeader.trim();
-        // 스티비 내보내기의 시스템 열은 사용자 정의 필드가 아니라 구독자 속성으로 받는다.
+        // 내보내기 CSV 의 시스템 열은 사용자 정의 필드가 아니라 구독자 속성으로 받는다.
         const system = SYSTEM_HEADERS[header] ?? SYSTEM_HEADERS[header.toLowerCase()];
         if (system) {
           switch (system) {
@@ -296,7 +296,7 @@ export async function subscriberRoutes(app: FastifyInstance) {
 }
 
 /**
- * 스티비 CSV 내보내기의 고정 열 이름 → 구독자 속성.
+ * 구독자 내보내기 CSV 의 고정 열 이름 → 구독자 속성.
  * 이 열들은 사용자 정의 필드로 만들면 안 된다 (상태를 필드에 넣으면 수신거부가 무시된다).
  */
 const SYSTEM_HEADERS: Record<string, string> = {

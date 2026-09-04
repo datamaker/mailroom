@@ -14,7 +14,7 @@ export interface UpsertInput {
    * 'SUBSCRIBER' — 본인이 구독폼으로 신청. 수신거부였어도 다시 구독 중으로 바꾼다.
    */
   by?: 'MANUAL' | 'SUBSCRIBER';
-  /** 값이 빈 필드를 기존 값 삭제로 볼지 (스티비의 "빈 값으로 업데이트" 체크박스) */
+  /** 값이 빈 필드를 기존 값 삭제로 볼지 ("빈 값으로 업데이트" 옵션) */
   clearEmpty?: boolean;
   /** 이관 시 원래 상태를 그대로 가져올 때. 지정하면 by 규칙보다 우선한다. */
   status?: 'subscribed' | 'unsubscribed' | 'deleted' | 'pending';
@@ -57,7 +57,7 @@ export async function upsertSubscriber(listId: string, input: UpsertInput): Prom
   if (input.groupNames?.length) groupIds.push(...(await ensureGroups(listId, input.groupNames)));
 
   if (existing) {
-    // 스티비와 같은 규칙: 운영자가 넣은 건 수신거부를 되살리지 않는다.
+    // 운영자가 넣은 건 수신거부를 되살리지 않는다.
     let status = existing.status;
     if (input.status) {
       status = input.status;
@@ -116,7 +116,7 @@ function pruneEmpty(obj: Record<string, unknown>) {
   return out;
 }
 
-/** 이름으로 그룹을 찾고 없으면 만든다. 이관 CSV 의 "그룹" 열을 그대로 살리기 위한 것. */
+/** 이름으로 그룹을 찾고 없으면 만든다. 내보내기 CSV 의 "그룹" 열을 그대로 살리기 위한 것. */
 const groupCache = new Map<string, string>();
 
 export async function ensureGroups(listId: string, names: string[]): Promise<string[]> {

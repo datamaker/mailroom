@@ -1,10 +1,10 @@
-# mailroom — 사내 뉴스레터 발송 플랫폼 (스티비 대체)
+# mailroom — 사내 뉴스레터 발송 플랫폼
 
 ## 왜
-스티비(stibee.com) 스탠다드 연간 요금제로 22,691/25,000 구독자를 쓰고 있고,
+기존 뉴스레터 SaaS 연간 요금제로 22,691/25,000 구독자를 쓰고 있고,
 바이오위클리·캐시바이 등 5개 주소록을 운영 중이다. 발송 자체는 이미 우리가
 프로덕션 SES(us-east-1, 5만/일, 14/초, cacheby.com·bioweekly.co.kr·labsby.com
-도메인 검증 완료)를 갖고 있으므로, 스티비가 제공하는 것은 사실상
+도메인 검증 완료)를 갖고 있으므로, 그 서비스가 제공하는 것은 사실상
 **주소록 관리 + 블록 에디터 + 발송 큐 + 통계** 네 가지다. 이걸 자체 구현하면
 요금이 사라지고, 무엇보다 **CLI/MCP로 AI가 직접 뉴스레터를 만들고 쏠 수 있다**.
 
@@ -45,7 +45,7 @@ send_jobs(큐), suppressions(하드바운스/스팸신고 전역 차단)
 - P5 CLI + MCP
 - P6 배포: Dockerfile, compose, nginx conf(gatehouse deploy/), 마이그레이션 가이드
 
-## 스티비 호환
+## 구독자 연동 v1 API
 기존 연동(구독폼, 서버측 구독자 추가)이 그대로 붙도록 v1 호환 엔드포인트를 둔다:
 `POST /v1/lists/:listId/subscribers` (eventOccuredBy/confirmEmailYN/groupIds/subscribers,
 응답 `{Ok, Error, Value}`), `DELETE /v1/lists/:listId/subscribers`,

@@ -60,7 +60,7 @@ aws sns list-subscriptions-by-topic --region us-east-1 --topic-arn $TOPIC
 
 ## 3. (선택) datasee.co.kr 도메인을 SES 에 추가
 
-스티비에서 `info@datasee.co.kr` 로 보내던 뉴스레터가 있는데 이 도메인은 SES 에
+`info@datasee.co.kr` 로 보내던 뉴스레터가 있는데 이 도메인은 SES 에
 검증돼 있지 않다. 그대로 쓰려면 SES 에 도메인을 추가하고 DKIM CNAME 3개를
 Route53 에 넣어야 한다. 현재 mailroom 의 기본 발신자는 검증된 도메인으로 잡아 두었다:
 바이오위클리 → `info@bioweekly.co.kr`, 캐시바이 → `info@cacheby.com`,

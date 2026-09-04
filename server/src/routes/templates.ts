@@ -3,7 +3,7 @@ import { many, one, query } from '../db/pool.js';
 import { badRequest, notFound } from '../lib/errors.js';
 import { currentUserId, requireWrite } from '../auth/plugin.js';
 import { renderEmailHtml } from '../render/html.js';
-import { importStibeeHtml } from '../render/import-stibee.js';
+import { importEmailHtml } from '../render/import-html.js';
 
 export async function templateRoutes(app: FastifyInstance) {
   app.get('/api/templates', async () => ({
@@ -40,7 +40,7 @@ export async function templateRoutes(app: FastifyInstance) {
     return { template };
   });
 
-  /** 발송한 이메일을 그대로 템플릿으로 저장 (스티비의 "내 상자/템플릿 저장") */
+  /** 발송한 이메일을 그대로 템플릿으로 저장 */
   app.post('/api/templates/from-campaign/:campaignId', async (req) => {
     requireWrite(req);
     const { campaignId } = req.params as { campaignId: string };
@@ -54,12 +54,12 @@ export async function templateRoutes(app: FastifyInstance) {
     return { template };
   });
 
-  /** 스티비에서 내보낸 HTML 을 블록으로 되돌려 템플릿으로 저장 */
+  /** 내보낸 이메일 HTML 을 블록으로 되돌려 템플릿으로 저장 */
   app.post('/api/templates/import', async (req) => {
     requireWrite(req);
     const b = (req.body ?? {}) as Record<string, any>;
     if (!b.html) throw badRequest('html 본문이 필요합니다.');
-    const { blocks, rawCount, images } = importStibeeHtml(b.html);
+    const { blocks, rawCount, images } = importEmailHtml(b.html);
     if (!blocks.length) throw badRequest('상자를 하나도 인식하지 못했습니다.');
     const template = await one(
       `insert into templates (name, content, created_by) values ($1, $2::jsonb, $3) returning *`,

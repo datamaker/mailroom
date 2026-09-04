@@ -3,7 +3,8 @@
 셀프호스트 뉴스레터 플랫폼. 주소록·구독자 관리, 블록 에디터, 예약 발송, 발송 통계를
 갖추고 있고, **CLI 와 MCP 로 AI가 직접 뉴스레터를 만들고 보낼 수 있다.**
 
-발송은 AWS SES(또는 SMTP)를 쓴다. 스티비를 쓰던 연동이 그대로 붙도록 v1 호환 API도 있다.
+발송은 AWS SES(또는 SMTP)를 쓴다. 쓰던 뉴스레터 서비스에서 구독자와 템플릿을
+그대로 가져올 수 있다.
 
 ```
 ┌─ web ──────────┐   ┌─ cli / mcp ────┐
@@ -105,9 +106,9 @@ claude mcp add mailroom -- mailroom mcp
 발송과 예약은 `confirm: true` 없이는 실행되지 않는다. AI가 혼자 22,000명에게 메일을
 쏘는 사고를 막기 위한 것으로, 사람에게 대상 인원과 제목을 확인받은 뒤에만 넘기도록 되어 있다.
 
-## 스티비 호환 API
+## 구독자 연동 API (v1)
 
-기존 연동은 base URL 과 토큰만 바꾸면 된다. 인증 헤더는 `AccessToken`.
+외부 서비스에서 구독자를 넣고 빼는 엔드포인트. 인증 헤더는 `AccessToken`.
 
 ```
 POST   /v1/lists/:listId/subscribers              {eventOccuredBy, confirmEmailYN, groupIds, subscribers[]}
@@ -115,8 +116,9 @@ DELETE /v1/lists/:listId/subscribers              [이메일…]
 POST   /v1/lists/:listId/subscribers/unsubscribe  [이메일…]
 ```
 
-응답은 스티비와 같은 `{Ok, Error, Value}` 모양이다. `:listId` 자리에 우리 uuid 나 slug 를 쓴다.
-이관 절차는 [`docs/MIGRATION.md`](docs/MIGRATION.md) 참고.
+응답은 `{Ok, Error, Value}` 모양이고, `:listId` 자리에 주소록 uuid 나 slug 를 쓴다.
+흔한 뉴스레터 서비스의 v1 API 와 모양을 맞춰 두어서, 쓰던 연동은 base URL 과 토큰만
+바꾸면 그대로 붙는다. 이관 절차는 [`docs/MIGRATION.md`](docs/MIGRATION.md) 참고.
 
 ## 라이선스
 

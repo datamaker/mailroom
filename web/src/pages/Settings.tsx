@@ -145,7 +145,7 @@ function Keys() {
   return (
     <>
       <div className="hint" style={{ marginBottom: 14 }}>
-        API 키로 CLI(<code>mailroom</code>)와 외부 연동이 접속합니다. 스티비 호환 엔드포인트는 <code>AccessToken</code> 헤더를 씁니다.
+        API 키로 CLI(<code>mailroom</code>)와 외부 연동이 접속합니다.
       </div>
       <div className="toolbar">
         <input placeholder="키 이름" value={name} onChange={(e) => setName(e.target.value)} />

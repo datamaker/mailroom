@@ -1,5 +1,5 @@
 /**
- * 메일머지. 스티비와 같은 `$%key%$` 문법을 쓴다 — 기존 콘텐츠를 그대로 옮길 수 있다.
+ * 메일머지. `$%key%$` 문법. 흔한 뉴스레터 서비스와 같은 모양이라 기존 콘텐츠를 그대로 옮길 수 있다.
  * 값이 없으면 사용자 정의 필드의 "메일머지 기본값"으로 떨어지고, 그것도 없으면 빈 문자열.
  */
 
@@ -24,7 +24,7 @@ export function mergeTags(input: string, src: MergeSource): string {
     const key = rawKey.toLowerCase();
     if (key === 'unsubscribe') return src.links?.unsubscribe ?? '';
     if (key === 'preferences') return src.links?.preferences ?? '';
-    // 스티비는 웹에서 보기를 permalink 라고 부른다 — 가져온 콘텐츠가 그대로 동작하도록.
+    // 웹에서 보기를 permalink 라고 부르는 서비스가 있다 — 가져온 콘텐츠가 그대로 동작하도록.
     if (key === 'webview' || key === 'permalink') return src.links?.webview ?? '';
 
     const direct = src.fields[rawKey] ?? src.fields[key];

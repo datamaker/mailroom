@@ -4,7 +4,7 @@ import { notFound } from '../lib/errors.js';
 import { toCsv } from '../lib/csv.js';
 
 /**
- * 발송 통계. 스티비의 캠페인 대시보드 + 전체 통계 화면에 대응한다.
+ * 발송 통계. 캠페인별 성과와 기간별 집계.
  * (요금제/페이지 통계는 범위 밖 — 발송 성과만 다룬다.)
  */
 export async function statsRoutes(app: FastifyInstance) {
@@ -36,7 +36,7 @@ export async function statsRoutes(app: FastifyInstance) {
       [id]
     );
 
-    // 발송 후 24시간 오픈/클릭 추이 (스티비의 시간별 라인차트)
+    // 발송 후 24시간 오픈/클릭 추이
     const timeline = await many<any>(
       `select date_trunc('hour', e.created_at) as hour,
               count(*) filter (where e.type = 'open')::int  as opens,

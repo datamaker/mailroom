@@ -2,9 +2,9 @@ import { parse, type HTMLElement } from 'node-html-parser';
 import type { Block } from './blocks.js';
 
 /**
- * 스티비가 내보낸 이메일 HTML → mailroom 블록.
+ * 기존 뉴스레터 서비스가 내보낸 이메일 HTML → mailroom 블록.
  *
- * 스티비 에디터는 상자마다 `.stb-block-outer` 로 감싸고 종류를 클래스로 남긴다.
+ * 그런 에디터는 보통 상자마다 `.stb-block-outer` 로 감싸고 종류를 클래스로 남긴다.
  * 그 규칙을 그대로 읽어 블록으로 되돌리면, 기존 뉴스레터를 통째로 가져와도
  * 계속 블록 단위로 편집할 수 있다. 알아보지 못한 상자는 원본 HTML 그대로
  * html 블록에 담아 둔다 — 모양이 깨지느니 편집만 불편한 편이 낫다.
@@ -20,7 +20,7 @@ export interface ImportResult {
   images: string[];
 }
 
-export function importStibeeHtml(html: string): ImportResult {
+export function importEmailHtml(html: string): ImportResult {
   seq = 0;
   const root = parse(html, { blockTextElements: { script: false, style: false } });
   const outers = root.querySelectorAll('.stb-block-outer');
@@ -154,7 +154,7 @@ function buttonBlock(cta: HTMLElement): Block {
 
 /**
  * 상자 안의 실제 내용만 꺼낸다.
- * 스티비 마크업은 텍스트를 table > tbody > tr > td 로 감싸는데, 그걸 그대로 가져오면
+ * 그 마크업은 텍스트를 table > tbody > tr > td 로 감싸는데, 그걸 그대로 가져오면
  * 우리 렌더러의 <div> 안에 <tbody> 가 들어가 유효하지 않은 HTML 이 된다(브라우저가
  * 태그를 버리면서 td 에 걸린 스타일도 같이 날아간다). 껍데기를 벗기고 내용만 쓴다.
  */
