@@ -1,0 +1,19 @@
+[
+  {
+    "Sid": "mailroomSesSend",
+    "Effect": "Allow",
+    "Action": ["ses:SendEmail", "ses:SendRawEmail"],
+    "Resource": [
+      "arn:aws:ses:us-east-1:634907100518:identity/bioweekly.co.kr",
+      "arn:aws:ses:us-east-1:634907100518:identity/cacheby.com",
+      "arn:aws:ses:us-east-1:634907100518:identity/labsby.com",
+      "arn:aws:ses:us-east-1:634907100518:configuration-set/mailroom"
+    ]
+  },
+  {
+    "Sid": "mailroomSesRead",
+    "Effect": "Allow",
+    "Action": ["ses:GetAccount", "ses:GetEmailIdentity", "ses:ListEmailIdentities"],
+    "Resource": "*"
+  }
+]

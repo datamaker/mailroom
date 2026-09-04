@@ -33,10 +33,12 @@ export async function settingsRoutes(app: FastifyInstance) {
     if (!sender) throw notFound('발신자를 찾을 수 없습니다.');
     const domain = sender.email.split('@')[1];
     const checks = await checkDomainAuth(domain);
+    // SES 에 없는 도메인은 아무리 DNS 가 맞아도 실제로 못 보낸다.
+    const sendable = checks.sesVerified ?? true;
     const updated = await one(
       `update senders set spf = $2, dkim = $3, dmarc = $4, verified = $5, checked_at = now()
         where id = $1 returning *`,
-      [id, checks.spf, checks.dkim, checks.dmarc, checks.spf && checks.dmarc]
+      [id, checks.spf, checks.dkim, checks.dmarc, checks.spf && checks.dmarc && sendable]
     );
     return { sender: updated, checks };
   });
@@ -144,7 +146,11 @@ export async function settingsRoutes(app: FastifyInstance) {
 }
 
 async function checkDomainAuth(domain: string) {
-  const out = { spf: false, dkim: false, dmarc: false };
+  const out: { spf: boolean; dkim: boolean | null; dmarc: boolean; sesVerified?: boolean } = {
+    spf: false,
+    dkim: null,
+    dmarc: false,
+  };
   try {
     const txt = await dns.resolveTxt(domain);
     out.spf = txt.some((chunks) => chunks.join('').toLowerCase().startsWith('v=spf1'));
@@ -157,15 +163,28 @@ async function checkDomainAuth(domain: string) {
   } catch {
     /* 미설정 */
   }
-  // SES DKIM 은 CNAME 3개(<token>._domainkey)라 셀렉터를 모르면 직접 못 본다.
-  // 도메인에 _domainkey 하위가 하나라도 있으면 설정된 것으로 본다.
-  for (const selector of ['default', 'selector1', 'ses', 'stibee', 'google']) {
+  // SES DKIM 은 <랜덤토큰>._domainkey CNAME 3개라 셀렉터를 모르면 DNS 로 확인할 수
+  // 없다. 발송을 SES 로 하니 SES 에 직접 물어보는 게 정확하다.
+  if (config.send.provider === 'ses') {
     try {
-      await dns.resolveTxt(`${selector}._domainkey.${domain}`);
-      out.dkim = true;
-      break;
+      const { SESv2Client, GetEmailIdentityCommand } = await import('@aws-sdk/client-sesv2');
+      const client = new SESv2Client({ region: config.send.ses.region });
+      const res: any = await client.send(new GetEmailIdentityCommand({ EmailIdentity: domain }));
+      out.dkim = res?.DkimAttributes?.Status === 'SUCCESS';
+      out.sesVerified = Boolean(res?.VerifiedForSendingStatus);
     } catch {
-      /* 다음 셀렉터 */
+      // 도메인이 SES 에 없거나 권한이 없으면 알 수 없음으로 둔다 — false 로 단정하지 않는다.
+    }
+  }
+  if (out.dkim === null) {
+    for (const selector of ['default', 'selector1', 'ses', 'google']) {
+      try {
+        await dns.resolveTxt(`${selector}._domainkey.${domain}`);
+        out.dkim = true;
+        break;
+      } catch {
+        /* 다음 셀렉터 */
+      }
     }
   }
   return out;
