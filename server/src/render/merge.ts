@@ -24,7 +24,8 @@ export function mergeTags(input: string, src: MergeSource): string {
     const key = rawKey.toLowerCase();
     if (key === 'unsubscribe') return src.links?.unsubscribe ?? '';
     if (key === 'preferences') return src.links?.preferences ?? '';
-    if (key === 'webview') return src.links?.webview ?? '';
+    // 스티비는 웹에서 보기를 permalink 라고 부른다 — 가져온 콘텐츠가 그대로 동작하도록.
+    if (key === 'webview' || key === 'permalink') return src.links?.webview ?? '';
 
     const direct = src.fields[rawKey] ?? src.fields[key];
     if (direct !== undefined && direct !== null && String(direct) !== '') return String(direct);
@@ -41,4 +42,4 @@ export function usedTags(input: string): string[] {
   return [...out];
 }
 
-export const SPECIAL_TAGS = ['unsubscribe', 'preferences', 'webview'];
+export const SPECIAL_TAGS = ['unsubscribe', 'preferences', 'webview', 'permalink'];

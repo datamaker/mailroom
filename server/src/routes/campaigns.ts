@@ -250,8 +250,14 @@ export async function campaignRoutes(app: FastifyInstance) {
       : null;
     if (c.sender_email && !sender?.verified) issues.push(`발신자 ${c.sender_email} 이(가) 인증되지 않았습니다.`);
 
-    const html = JSON.stringify(c.content ?? []);
-    if (!html.includes('"footer"')) issues.push('푸터 상자가 없습니다 — 수신거부 링크가 빠집니다.');
+    // 푸터 상자가 없어도 텍스트 안에 $%unsubscribe%$ 가 있으면 된다.
+    // (스티비에서 가져온 콘텐츠는 푸터를 텍스트 상자로 갖고 있다)
+    const serialized = JSON.stringify(c.content ?? []);
+    const hasUnsubscribe =
+      serialized.includes('unsubscribe') || serialized.includes('"footer"');
+    if (!hasUnsubscribe) {
+      issues.push('수신거부 링크가 없습니다 — 푸터 상자를 넣거나 본문에 $%unsubscribe%$ 를 쓰세요.');
+    }
     if (c.is_ad && !/^\(광고/.test(c.subject.trim())) issues.push('광고 메일이면 제목에 (광고)가 자동으로 붙습니다.');
 
     return { count, issues };
