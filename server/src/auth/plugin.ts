@@ -65,8 +65,16 @@ export async function authPlugin(app: FastifyInstance) {
       req.actor = { user, apiKeyId: null, scopes: ['read', 'write', 'admin'] };
       return;
     }
+
+    // 여기까지 왔으면 신원이 없다. 읽기 라우트마다 requireActor 를 부르는 대신
+    // 한 곳에서 막는다 — 빼먹으면 구독자 명단이 통째로 열리기 때문에
+    // 화이트리스트(PUBLIC_PREFIXES) 방식이어야 안전하다.
+    if (!ANONYMOUS_OK.has(url)) throw unauthorized();
   });
 }
+
+/** 신원이 없어도 200 을 돌려줘야 하는 곳 (로그인 화면이 상태를 물어본다). */
+const ANONYMOUS_OK = new Set(['/api/auth/me', '/api/auth/logout']);
 
 export function requireActor(req: FastifyRequest): Actor {
   if (!req.actor) throw unauthorized();
