@@ -60,7 +60,7 @@ SSO 없이 혼자 볼 때는 `.env.dev` 에 `MAILROOM_DEV_AUTH_EMAIL=you@datasee
 
 ```bash
 npm i -g @datasee/mailroom-cli
-mailroom login --url https://mailroom.datasee.co.kr --key mrk_...
+mailroom login --url https://mailroom.datasee.co.kr   # 사내 SSO, 브라우저에서 승인
 
 mailroom lists ls
 mailroom subs ls <listId> -q 대학교
@@ -94,11 +94,12 @@ mailroom campaigns stats <id>
 ## MCP (AI에서 조작)
 
 ```bash
-claude mcp add mailroom -- mailroom mcp
-# 또는 ~/.claude.json / claude_desktop_config.json 에
-# { "command": "mailroom", "args": ["mcp"],
-#   "env": { "MAILROOM_URL": "https://…", "MAILROOM_API_KEY": "mrk_…" } }
+mailroom login --url https://mailroom.datasee.co.kr   # 먼저 로그인
+claude mcp add mailroom -- mailroom mcp               # 설정을 그대로 물려받는다
 ```
+
+무인 실행이면 환경변수로 API 키를 준다:
+`{ "command": "mailroom", "args": ["mcp"], "env": { "MAILROOM_URL": "…", "MAILROOM_API_KEY": "mrk_…" } }`
 
 도구: 주소록 조회, 구독자 검색/추가, 이메일 생성(마크다운)·수정·대상 설정·미리보기·점검·
 테스트 발송·발송·예약·취소·통계.

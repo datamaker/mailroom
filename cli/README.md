@@ -6,12 +6,21 @@
 
 ```bash
 npm i -g @datasee/mailroom-cli
-mailroom login --url https://mailroom.example.com --key mrk_...
+mailroom login --url https://mailroom.example.com
 mailroom doctor
 ```
 
-`doctor` 는 연결·인증·발신자 인증 상태를 한 번에 확인해 준다. 여기서 초록불이면
-나머지도 다 된다.
+`login` 은 사내 SSO 로 붙는다. 브라우저가 열리고 승인하면 끝이다 — 키를 복사해 붙일
+일이 없다. 세션은 14일 유효하고 `mailroom login --status` 로 남은 기간을 볼 수 있다.
+
+무인 실행(CI, 서버 연동)처럼 브라우저를 띄울 수 없는 곳에서는 API 키를 쓴다:
+
+```bash
+mailroom login --url https://mailroom.example.com --key mrk_...
+```
+
+`doctor` 는 연결·인증 방식·발신자 인증·발송 가능 여부를 한 번에 확인해 준다.
+여기서 초록불이면 나머지도 다 된다.
 
 ## 자주 쓰는 것
 
@@ -60,10 +69,12 @@ mailroom campaigns create --list <listId> --subject "..." --markdown - < draft.m
 ## MCP — AI에게 맡기기
 
 ```bash
+mailroom login --url https://mailroom.example.com   # 먼저 로그인해 두고
 claude mcp add mailroom -- mailroom mcp
 ```
 
-또는 설정 파일에 직접:
+MCP 서버는 CLI 설정을 그대로 쓰므로 SSO 로 로그인해 뒀다면 환경변수가 필요 없다.
+다만 세션이 만료되면(14일) 다시 로그인해야 한다 — 계속 붙어 있어야 한다면 API 키를 쓴다:
 
 ```json
 {
@@ -90,11 +101,12 @@ claude mcp add mailroom -- mailroom mcp
 
 ## 설정
 
-`MAILROOM_URL` / `MAILROOM_API_KEY` 환경변수가 설정 파일보다 우선한다.
-설정 파일은 `~/.config/mailroom/config.json` 이고 API 키가 들어 있어 `600` 으로 저장된다.
-`MAILROOM_CONFIG` 로 위치를 바꿀 수 있다.
+`MAILROOM_URL` / `MAILROOM_API_KEY` / `MAILROOM_TOKEN` 환경변수가 설정 파일보다 우선한다.
+설정 파일은 `~/.config/mailroom/config.json` 이고 토큰이 들어 있어 `600` 으로 저장된다.
+`MAILROOM_CONFIG` 로 위치를 바꿀 수 있다. `mailroom logout` 으로 지운다.
 
-API 키는 mailroom 웹의 **설정 → API 키**에서 발급한다.
+API 키는 mailroom 웹의 **설정 → API 키**에서 발급한다. 사람이 쓸 때는 SSO 가 낫다 —
+키는 만료가 없어서 계정을 막아도 살아 있고, 셸 히스토리에도 남는다.
 
 ## 라이선스
 
