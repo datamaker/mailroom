@@ -4,7 +4,13 @@ import { homedir } from 'node:os';
 
 export interface CliConfig {
   url?: string;
+  /** 연동용 API 키 */
   apiKey?: string;
+  /** SSO 로그인으로 받은 세션 토큰 */
+  token?: string;
+  /** 세션 만료 시각 (ISO). 만료가 가까우면 다시 로그인하라고 알려 준다. */
+  expiresAt?: string;
+  email?: string;
 }
 
 const CONFIG_PATH =
@@ -15,6 +21,7 @@ export function loadConfig(): CliConfig {
   const fromEnv: CliConfig = {};
   if (process.env.MAILROOM_URL) fromEnv.url = process.env.MAILROOM_URL;
   if (process.env.MAILROOM_API_KEY) fromEnv.apiKey = process.env.MAILROOM_API_KEY;
+  if (process.env.MAILROOM_TOKEN) fromEnv.token = process.env.MAILROOM_TOKEN;
 
   let fromFile: CliConfig = {};
   if (existsSync(CONFIG_PATH)) {

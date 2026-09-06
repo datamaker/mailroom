@@ -30,15 +30,24 @@ export function doctorCommand() {
       return;
     }
 
-    if (!cfg.apiKey) {
-      bad('API 키가 없습니다. 설정 > API 키에서 발급한 뒤 mailroom login --key mrk_...');
+    if (!cfg.apiKey && !cfg.token) {
+      bad('로그인되어 있지 않습니다. `mailroom login --url ' + cfg.url + '` 로 SSO 로그인하세요.');
       process.exitCode = 1;
       return;
+    }
+    if (cfg.token && cfg.expiresAt) {
+      const left = Math.ceil((new Date(cfg.expiresAt).getTime() - Date.now()) / 86_400_000);
+      if (left <= 0) {
+        bad('SSO 세션이 만료됐습니다. 다시 로그인하세요.');
+        process.exitCode = 1;
+        return;
+      }
+      if (left <= 3) warn(`SSO 세션이 ${left}일 뒤 만료됩니다.`);
     }
 
     try {
       const { lists } = await api<any>('/api/lists');
-      ok(`인증됨 — 주소록 ${lists.length}개, 구독자 ${lists.reduce((a: number, l: any) => a + l.subscriber_count, 0).toLocaleString('ko-KR')}명`);
+      ok(`인증됨 (${cfg.token ? 'SSO ' + (cfg.email ?? '') : 'API 키'}) — 주소록 ${lists.length}개, 구독자 ${lists.reduce((a: number, l: any) => a + l.subscriber_count, 0).toLocaleString('ko-KR')}명`);
     } catch (err: any) {
       bad(`인증 실패: ${err.message}`);
       process.exitCode = 1;

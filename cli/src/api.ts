@@ -9,16 +9,22 @@ export class ApiError extends Error {
 function base() {
   const { url } = loadConfig();
   if (!url) {
-    throw new Error('mailroom 주소가 설정되지 않았습니다. `mailroom login --url https://... --key mrk_...` 를 먼저 실행하세요.');
+    throw new Error('mailroom 주소가 설정되지 않았습니다. `mailroom login --url https://...` 를 먼저 실행하세요.');
   }
   return url.replace(/\/$/, '');
+}
+
+/** API 키가 있으면 그것, 없으면 SSO 세션 토큰. 서버는 둘 다 같은 헤더로 받는다. */
+export function authToken() {
+  const cfg = loadConfig();
+  return cfg.apiKey || cfg.token || '';
 }
 
 export async function api<T = any>(
   path: string,
   init: { method?: string; body?: unknown; query?: Record<string, string | number | undefined> } = {}
 ): Promise<T> {
-  const { apiKey } = loadConfig();
+  const apiKey = authToken();
   const url = new URL(base() + path);
   for (const [k, v] of Object.entries(init.query ?? {})) {
     if (v !== undefined && v !== '') url.searchParams.set(k, String(v));
@@ -43,7 +49,7 @@ export async function api<T = any>(
 }
 
 export async function apiRaw(path: string): Promise<string> {
-  const { apiKey } = loadConfig();
+  const apiKey = authToken();
   const res = await fetch(base() + path, {
     headers: apiKey ? { AccessToken: apiKey } : {},
   });

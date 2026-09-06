@@ -47,6 +47,8 @@ export const config = {
     issuer: env.OIDC_ISSUER || '',
     clientId: env.OIDC_CLIENT_ID || '',
     clientSecret: env.OIDC_CLIENT_SECRET || '',
+    /** CLI 는 시크릿을 가질 수 없는 공개 클라이언트라 별도 id 를 쓴다(device flow). */
+    cliClientId: env.OIDC_CLI_CLIENT_ID || 'mailroom-cli',
     get enabled() {
       return Boolean(env.OIDC_ISSUER && env.OIDC_CLIENT_ID && env.OIDC_CLIENT_SECRET);
     },

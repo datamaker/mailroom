@@ -2,7 +2,7 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { ApiError } from './api.js';
-import { loginCommand } from './commands/login.js';
+import { loginCommand, logoutCommand } from './commands/login.js';
 import { listsCommand } from './commands/lists.js';
 import { subscribersCommand } from './commands/subscribers.js';
 import { campaignsCommand } from './commands/campaigns.js';
@@ -20,6 +20,7 @@ program
   .version('0.1.0');
 
 program.addCommand(loginCommand());
+program.addCommand(logoutCommand());
 program.addCommand(listsCommand());
 program.addCommand(subscribersCommand());
 program.addCommand(campaignsCommand());

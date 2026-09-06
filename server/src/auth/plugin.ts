@@ -16,6 +16,7 @@ const PUBLIC_PREFIXES = [
   // /api/auth/me 와 /logout 은 훅을 타야 한다 — 세션을 못 읽으면 항상 로그아웃으로 보인다.
   '/api/auth/status',
   '/api/auth/oidc/',
+  '/api/auth/cli/exchange',
   '/api/health',
   '/t/',
   '/u/',
@@ -43,9 +44,16 @@ export async function authPlugin(app: FastifyInstance) {
       (typeof accessToken === 'string' && accessToken) ||
       (auth?.startsWith('Bearer ') ? auth.slice(7) : '');
     if (raw) {
-      const actor = await actorFromApiKey(raw.trim());
+      const token = raw.trim();
+      const actor = await actorFromApiKey(token);
       if (actor) {
         req.actor = actor;
+        return;
+      }
+      // CLI 가 SSO 로 로그인하면 API 키가 아니라 세션 토큰을 들고 온다.
+      const ssoUser = await userFromSession(token);
+      if (ssoUser) {
+        req.actor = { user: ssoUser, apiKeyId: null, scopes: ['read', 'write', 'admin'] };
         return;
       }
     }
