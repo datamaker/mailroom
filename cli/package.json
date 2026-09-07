@@ -5,6 +5,15 @@
     "access": "public"
   },
   "description": "CLI and MCP server for mailroom, the self-hosted newsletter platform. Manage address books, write newsletters in Markdown, send, and read delivery stats — or let Claude do it.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/datamaker/mailroom.git",
+    "directory": "cli"
+  },
+  "homepage": "https://github.com/datamaker/mailroom#readme",
+  "bugs": {
+    "url": "https://github.com/datamaker/mailroom/issues"
+  },
   "keywords": [
     "newsletter",
     "email",
@@ -21,7 +30,7 @@
   "license": "MIT",
   "type": "module",
   "bin": {
-    "mailroom": "./dist/index.js"
+    "mailroom": "dist/index.js"
   },
   "files": [
     "dist",
