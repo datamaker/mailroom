@@ -108,6 +108,179 @@ export async function statsRoutes(app: FastifyInstance) {
     };
   });
 
+  /** 링크별 클릭 — 대시보드의 TOP 5 "더보기" */
+  app.get('/api/campaigns/:id/links', async (req) => {
+    const { id } = req.params as { id: string };
+    const q = req.query as Record<string, string>;
+    const limit = Math.min(Number(q.limit) || 100, 1000);
+    const offset = Number(q.offset) || 0;
+    const total = await one<{ count: number }>(
+      'select count(*)::int as count from campaign_links where campaign_id = $1',
+      [id]
+    );
+    const links = await many(
+      `select id, url, label, click_count, unique_click_count
+         from campaign_links where campaign_id = $1
+        order by click_count desc, id
+        limit ${limit} offset ${offset}`,
+      [id]
+    );
+    return { links, total: total?.count ?? 0 };
+  });
+
+  /** 이 링크를 누가 언제 눌렀나 — 클릭맵과 링크 목록에서 파고드는 화면 */
+  app.get('/api/campaigns/:id/links/:linkId/clicks', async (req) => {
+    const { id, linkId } = req.params as { id: string; linkId: string };
+    const q = req.query as Record<string, string>;
+    const limit = Math.min(Number(q.limit) || 100, 1000);
+    const offset = Number(q.offset) || 0;
+
+    const link = await one<{ url: string }>(
+      'select url from campaign_links where id = $1 and campaign_id = $2',
+      [linkId, id]
+    );
+    if (!link) throw notFound('링크를 찾을 수 없습니다.');
+
+    const total = await one<{ count: number }>(
+      `select count(*)::int as count from events where campaign_id = $1 and link_id = $2 and type = 'click'`,
+      [id, linkId]
+    );
+    const clicks = await many(
+      `select e.created_at, e.device, e.os, e.client,
+              coalesce(s.email, r.email) as email, s.fields, s.id as subscriber_id
+         from events e
+         left join subscribers s on s.id = e.subscriber_id
+         left join campaign_recipients r on r.id = e.recipient_id
+        where e.campaign_id = $1 and e.link_id = $2 and e.type = 'click'
+        order by e.created_at desc
+        limit ${limit} offset ${offset}`,
+      [id, linkId]
+    );
+    return { link, clicks, total: total?.count ?? 0 };
+  });
+
+  /**
+   * 오픈·클릭한 구독자 전체 목록 — Top5 "더보기".
+   * 중복 포함 횟수와 마지막 시각을 함께 준다(스티비의 같은 화면과 맞춤).
+   */
+  app.get('/api/campaigns/:id/engagement', async (req) => {
+    const { id } = req.params as { id: string };
+    const q = req.query as Record<string, string>;
+    const kind = q.type === 'click' ? 'click' : 'open';
+    const limit = Math.min(Number(q.limit) || 100, 1000);
+    const offset = Number(q.offset) || 0;
+
+    const countCol = kind === 'click' ? 'r.click_count' : 'r.open_count';
+    const atCol = kind === 'click' ? 'r.clicked_at' : 'r.opened_at';
+
+    const total = await one<{ count: number }>(
+      `select count(*)::int as count from campaign_recipients r
+        where r.campaign_id = $1 and ${countCol} > 0`,
+      [id]
+    );
+    const rows = await many(
+      `select r.email, ${countCol} as count, ${atCol} as last_at,
+              s.id as subscriber_id, s.fields
+         from campaign_recipients r
+         left join subscribers s on s.id = r.subscriber_id
+        where r.campaign_id = $1 and ${countCol} > 0
+        order by ${countCol} desc, ${atCol} desc nulls last
+        limit ${limit} offset ${offset}`,
+      [id]
+    );
+    return { type: kind, rows, total: total?.count ?? 0 };
+  });
+
+  /**
+   * 클릭맵: 발송된 그대로의 HTML 과 링크별 클릭 비율.
+   * 프런트가 iframe 안 앵커 위치를 재서 뱃지를 겹쳐 그린다.
+   */
+  app.get('/api/campaigns/:id/clickmap', async (req) => {
+    const { id } = req.params as { id: string };
+    const c = await one<{ content_html: string | null; click_count: number }>(
+      'select content_html, click_count from campaigns where id = $1',
+      [id]
+    );
+    if (!c?.content_html) throw notFound('아직 발송되지 않아 클릭맵을 만들 수 없습니다.');
+
+    const links = await many<{ id: number; url: string; click_count: number; unique_click_count: number }>(
+      'select id, url, click_count, unique_click_count from campaign_links where campaign_id = $1',
+      [id]
+    );
+    const totalClicks = links.reduce((a, l) => a + l.click_count, 0);
+
+    // 수신자 자리표시자를 비우고, 앵커에 링크 id 를 심어 프런트가 짝지을 수 있게 한다.
+    let html = c.content_html.split('__MR_RCPT__').join('map');
+    for (const l of links) {
+      html = html.replace(
+        new RegExp(`href="([^"]*\\/t\\/c\\/map\\/${l.id})"`, 'g'),
+        `href="$1" data-mr-link="${l.id}"`
+      );
+    }
+
+    return {
+      html,
+      totalClicks,
+      links: links
+        .map((l) => ({
+          ...l,
+          pct: totalClicks ? Math.round((l.click_count / totalClicks) * 1000) / 10 : 0,
+        }))
+        .sort((a, b) => b.click_count - a.click_count),
+    };
+  });
+
+  /** 링크·구독자 상세 목록 CSV */
+  app.get('/api/campaigns/:id/engagement/export', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const q = req.query as Record<string, string>;
+    const kind = q.type === 'click' ? 'click' : 'open';
+    const countCol = kind === 'click' ? 'r.click_count' : 'r.open_count';
+    const atCol = kind === 'click' ? 'r.clicked_at' : 'r.opened_at';
+    const rows = await many<any>(
+      `select r.email, ${countCol} as count, ${atCol} as last_at, s.fields
+         from campaign_recipients r
+         left join subscribers s on s.id = r.subscriber_id
+        where r.campaign_id = $1 and ${countCol} > 0
+        order by ${countCol} desc`,
+      [id]
+    );
+    reply.header('content-type', 'text/csv; charset=utf-8');
+    reply.header('content-disposition', `attachment; filename="${kind}-${id}.csv"`);
+    return toCsv(
+      rows.map((r) => ({
+        이메일: r.email,
+        이름: r.fields?.name ?? '',
+        회사: r.fields?.company ?? '',
+        [kind === 'click' ? '클릭(중복 포함)' : '오픈(중복 포함)']: r.count,
+        [kind === 'click' ? '마지막 클릭일' : '마지막 오픈일']: r.last_at,
+      }))
+    );
+  });
+
+  app.get('/api/campaigns/:id/links/:linkId/clicks/export', async (req, reply) => {
+    const { id, linkId } = req.params as { id: string; linkId: string };
+    const rows = await many<any>(
+      `select e.created_at, coalesce(s.email, r.email) as email, s.fields
+         from events e
+         left join subscribers s on s.id = e.subscriber_id
+         left join campaign_recipients r on r.id = e.recipient_id
+        where e.campaign_id = $1 and e.link_id = $2 and e.type = 'click'
+        order by e.created_at desc`,
+      [id, linkId]
+    );
+    reply.header('content-type', 'text/csv; charset=utf-8');
+    reply.header('content-disposition', `attachment; filename="link-${linkId}-clicks.csv"`);
+    return toCsv(
+      rows.map((r) => ({
+        이메일: r.email,
+        이름: r.fields?.name ?? '',
+        회사: r.fields?.company ?? '',
+        클릭일: r.created_at,
+      }))
+    );
+  });
+
   app.get('/api/campaigns/:id/recipients', async (req) => {
     const { id } = req.params as { id: string };
     const q = req.query as Record<string, string>;

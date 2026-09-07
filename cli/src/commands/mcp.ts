@@ -381,6 +381,30 @@ function registerTools(server: McpServer) {
   );
 
   server.tool(
+    'mailroom_campaign_links',
+    '이메일 본문 링크별 클릭 수. 대시보드 TOP 5 가 아니라 전체 목록이다.',
+    { campaignId: z.string(), limit: z.number().optional() },
+    async ({ campaignId, limit }) =>
+      ok(await api(`/api/campaigns/${campaignId}/links?limit=${limit ?? 200}`))
+  );
+
+  server.tool(
+    'mailroom_link_clicks',
+    '특정 링크를 누른 사람 목록 — 이메일, 이름, 클릭 시각, 기기. linkId 는 mailroom_campaign_links 로 얻는다.',
+    { campaignId: z.string(), linkId: z.number(), limit: z.number().optional() },
+    async ({ campaignId, linkId, limit }) =>
+      ok(await api(`/api/campaigns/${campaignId}/links/${linkId}/clicks?limit=${limit ?? 200}`))
+  );
+
+  server.tool(
+    'mailroom_campaign_engagement',
+    '오픈하거나 클릭한 구독자 전체 목록 — 횟수와 마지막 시각 포함.',
+    { campaignId: z.string(), type: z.enum(['open', 'click']), limit: z.number().optional() },
+    async ({ campaignId, type, limit }) =>
+      ok(await api(`/api/campaigns/${campaignId}/engagement?type=${type}&limit=${limit ?? 200}`))
+  );
+
+  server.tool(
     'mailroom_stats_overview',
     '기간·주소록·태그로 묶은 전체 발송 통계.',
     {

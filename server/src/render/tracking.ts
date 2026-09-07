@@ -1,5 +1,6 @@
 import { config } from '../config.js';
 import { signPayload } from '../lib/crypto.js';
+import { decodeEntities } from '../lib/html-entities.js';
 
 /** 수신자별로 치환되는 자리표시자. 렌더 시점엔 recipient id를 모른다. */
 export const RCPT_PLACEHOLDER = '__MR_RCPT__';
@@ -38,7 +39,9 @@ export interface TrackedLink {
 export function extractLinks(html: string): TrackedLink[] {
   const links = new Map<string, TrackedLink>();
   for (const m of html.matchAll(/href="([^"]+)"/g)) {
-    const url = m[1];
+    // href 는 HTML 이라 &amp; 가 섞여 있다 — 실제 URL 로 풀어서 저장해야
+    // 클릭 리다이렉트가 원래 주소로 간다.
+    const url = decodeEntities(m[1]);
     if (!/^https?:\/\//i.test(url)) continue;
     // 수신거부/구독변경/웹뷰는 우리 링크라 클릭 통계에서 뺀다.
     if (url.startsWith(`${config.publicUrl}/u/`)) continue;
@@ -52,7 +55,7 @@ export function extractLinks(html: string): TrackedLink[] {
 
 export function rewriteLinks(html: string, linkIds: Map<string, number>): string {
   return html.replace(/href="([^"]+)"/g, (full, url: string) => {
-    const id = linkIds.get(url);
+    const id = linkIds.get(decodeEntities(url));
     if (!id) return full;
     return `href="${config.publicUrl}/t/c/${RCPT_PLACEHOLDER}/${id}"`;
   });

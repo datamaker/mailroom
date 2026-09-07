@@ -220,6 +220,7 @@ textarea { min-height: 90px; resize: vertical; }
   max-height: 86vh; overflow: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.2);
 }
 .modal.wide { max-width: 720px; }
+.modal.xwide { max-width: 900px; }
 .modal h2 { margin-top: 0; font-size: 18px; }
 
 /* ---- 차트 ---- */
@@ -275,6 +276,47 @@ textarea { min-height: 90px; resize: vertical; }
 /* ---- 모바일 ----
    좁은 화면에서는 세로 사이드바를 접는 대신 상단 가로 내비게이션으로 바꾼다.
    아이콘이 없어서 폭만 줄이면 글자가 뭉개진다. */
+
+/* 섹션 제목 + 우측 액션 버튼 */
+.section-head { display: flex; align-items: center; gap: 8px; margin: 22px 0 8px; }
+.section-head h2 { margin: 0; }
+
+/*
+ * 링크 URL·이메일이 길어도 가로 스크롤 없이 숫자 칸이 보이도록.
+ * max-width:0 + width:100% 는 표 칸에서 말줄임을 걸기 위한 관용 조합이다.
+ */
+table.data.fit { min-width: 0; table-layout: auto; }
+table.data td.trunc {
+  max-width: 0; width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+table.data td.trunc + td.trunc { width: 24%; min-width: 140px; }
+table.data td.nowrap, table.data th.nowrap { white-space: nowrap; }
+table.data.fit td.num, table.data.fit th.num { width: 1%; white-space: nowrap; }
+.panel:has(> table.data.fit) { overflow-x: hidden; }
+
+.modal-table { max-height: 60vh; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+.modal-table table.data { border-collapse: separate; border-spacing: 0; }
+.modal-table thead th { position: sticky; top: 0; z-index: 1; background: var(--bg-sunken); }
+
+/* 클릭맵 — 발송본 위에 클릭 수를 겹쳐 그린다 */
+.clickmap { position: relative; border: 1px solid var(--border); border-radius: var(--radius); overflow: auto; max-height: 62vh; background: #fff; }
+.clickmap iframe { display: block; width: 100%; border: 0; pointer-events: none; }
+.clickmap-layer { position: absolute; inset: 0; }
+.clickmap-box {
+  position: absolute; cursor: pointer; border-radius: 3px;
+  outline: 2px solid rgba(220, 38, 38, 0.85); background: rgba(220, 38, 38, 0.14);
+}
+.clickmap-box.cold { outline-color: rgba(100, 116, 139, 0.5); background: rgba(100, 116, 139, 0.08); cursor: default; }
+.clickmap-tag {
+  position: absolute; transform: translate(4px, -6px); cursor: pointer;
+  background: #dc2626; color: #fff; font-size: 11px; font-weight: 700;
+  padding: 2px 6px; border-radius: 10px; white-space: nowrap;
+  font-variant-numeric: tabular-nums; box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+}
+.clickmap-tag.flip { transform: translate(calc(-100% - 4px), -6px); }
+.clickmap-tag.cold { background: #94a3b8; cursor: default; }
+
 @media (max-width: 820px) {
   .app { flex-direction: column; }
 

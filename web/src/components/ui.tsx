@@ -44,15 +44,18 @@ export function Modal({
   onClose,
   children,
   wide,
+  size,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   wide?: boolean;
+  size?: 'wide' | 'xwide';
 }) {
+  const cls = size ?? (wide ? 'wide' : '');
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className={`modal${wide ? ' wide' : ''}`} onClick={(e) => e.stopPropagation()}>
+      <div className={`modal${cls ? ` ${cls}` : ''}`} onClick={(e) => e.stopPropagation()}>
         <h2>{title}</h2>
         {children}
       </div>

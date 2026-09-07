@@ -5,6 +5,7 @@ import { badRequest, notFound } from '../lib/errors.js';
 import { currentUserId, requireAdmin, requireWrite } from '../auth/plugin.js';
 import { createApiKey } from '../auth/service.js';
 import { config } from '../config.js';
+import { UTM_DEFAULTS, tagUrl, type UtmConfig } from '../render/utm.js';
 
 export async function settingsRoutes(app: FastifyInstance) {
   // ---- 발신자 주소 ----
@@ -133,6 +134,31 @@ export async function settingsRoutes(app: FastifyInstance) {
     const { email } = req.params as { email: string };
     await query('delete from suppressions where lower(email) = lower($1)', [decodeURIComponent(email)]);
     return { ok: true };
+  });
+
+  // ---- UTM 기본값 ----
+  app.get('/api/settings/utm', async () => {
+    const row = await one<{ value: UtmConfig }>(`select value from settings where key = 'utm'`);
+    const utm = { ...UTM_DEFAULTS, ...(row?.value ?? {}) };
+    return { utm, example: tagUrl('https://example.com/article?id=7', { ...utm, campaign: utm.campaign || '뉴스레터-제목' }) };
+  });
+
+  app.put('/api/settings/utm', async (req) => {
+    requireAdmin(req);
+    const b = (req.body ?? {}) as Record<string, any>;
+    const utm: UtmConfig = {
+      enabled: b.enabled !== false,
+      source: String(b.source ?? '').trim(),
+      medium: String(b.medium ?? '').trim(),
+      campaign: String(b.campaign ?? '').trim(),
+      mode: b.mode === 'fill' ? 'fill' : 'overwrite',
+    };
+    await query(
+      `insert into settings (key, value) values ('utm', $1)
+       on conflict (key) do update set value = excluded.value, updated_at = now()`,
+      [JSON.stringify(utm)]
+    );
+    return { utm };
   });
 
   app.get('/api/settings', async () => ({

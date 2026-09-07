@@ -341,6 +341,13 @@ async function recordClick(
   );
   if (!r) return;
 
+  // 링크별 순 클릭은 링크 단위로 세야 한다. 캠페인 첫 클릭(clicked_at)으로 세면
+  // 같은 사람이 두 번째 링크를 눌렀을 때 그 링크의 순 클릭이 안 오른다.
+  const seen = await one<{ x: number }>(
+    `select 1 as x from events where link_id = $1 and recipient_id = $2 and type = 'click' limit 1`,
+    [linkId, recipientId]
+  );
+
   const info = parseUserAgent(ua);
   await query(
     `insert into events (campaign_id, recipient_id, subscriber_id, link_id, type, user_agent, ip, device, os, client)
@@ -358,7 +365,7 @@ async function recordClick(
     `update campaign_links
         set click_count = click_count + 1, unique_click_count = unique_click_count + $2
       where id = $1`,
-    [linkId, r.clicked_at ? 0 : 1]
+    [linkId, seen ? 0 : 1]
   );
   // 이미지 차단 환경에서는 클릭이 유일한 오픈 신호다.
   await query(

@@ -1,12 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, fmtDate, fmtNum, pct } from '../api';
-import { Badge, Empty, StatCard } from '../components/ui';
+import { Badge, Empty, Modal, StatCard } from '../components/ui';
 
 export default function CampaignStats() {
   const { id } = useParams();
   const [s, setS] = useState<any>(null);
   const [tab, setTab] = useState<'dashboard' | 'recipients'>('dashboard');
+  // 대시보드 위에 겹쳐 띄우는 상세 목록. null 이면 아무것도 안 띄운다.
+  const [view, setView] = useState<View>(null);
 
   useEffect(() => {
     const load = () => api(`/api/campaigns/${id}/stats`).then(setS);
@@ -88,78 +91,40 @@ export default function CampaignStats() {
             {s.timeline.length ? <Timeline rows={s.timeline} /> : <Empty>아직 기록이 없습니다.</Empty>}
           </div>
 
-          <h2>많이 클릭한 링크</h2>
+          <SectionHead title="많이 클릭한 링크">
+            <button className="btn sm" onClick={() => setView({ kind: 'clickmap' })}>
+              클릭맵 보기
+            </button>
+            <button className="btn sm" onClick={() => setView({ kind: 'links' })}>
+              더보기
+            </button>
+          </SectionHead>
           <div className="panel" style={{ padding: 0 }}>
-            <table className="data">
-              <thead>
-                <tr>
-                  <th>링크</th>
-                  <th className="num">클릭</th>
-                  <th className="num">순 클릭</th>
-                </tr>
-              </thead>
-              <tbody>
-                {s.links.map((l: any) => (
-                  <tr key={l.id}>
-                    <td className="mono">{l.url}</td>
-                    <td className="num">{fmtNum(l.click_count)}</td>
-                    <td className="num">{fmtNum(l.unique_click_count)}</td>
-                  </tr>
-                ))}
-                {!s.links.length ? (
-                  <tr>
-                    <td colSpan={3}>
-                      <Empty>링크가 없습니다.</Empty>
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
+            <LinkTable
+              rows={s.links.slice(0, 5)}
+              onPick={(l) => setView({ kind: 'linkClicks', link: l })}
+            />
           </div>
 
           <div className="row" style={{ alignItems: 'flex-start', marginTop: 8 }}>
-            <div>
-              <h2>많이 오픈한 구독자</h2>
+            <div style={{ minWidth: 0 }}>
+              <SectionHead title="많이 오픈한 구독자">
+                <button className="btn sm" onClick={() => setView({ kind: 'engagement', type: 'open' })}>
+                  더보기
+                </button>
+              </SectionHead>
               <div className="panel" style={{ padding: 0 }}>
-                <table className="data">
-                  <tbody>
-                    {s.topOpeners.map((r: any) => (
-                      <tr key={r.email}>
-                        <td>{r.email}</td>
-                        <td className="num">{r.open_count}</td>
-                      </tr>
-                    ))}
-                    {!s.topOpeners.length ? (
-                      <tr>
-                        <td>
-                          <Empty>없음</Empty>
-                        </td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                </table>
+                <PeopleTable rows={s.topOpeners} countKey="open_count" />
               </div>
             </div>
-            <div>
-              <h2>많이 클릭한 구독자</h2>
+            <div style={{ minWidth: 0 }}>
+              <SectionHead title="많이 클릭한 구독자">
+                <button className="btn sm" onClick={() => setView({ kind: 'engagement', type: 'click' })}>
+                  더보기
+                </button>
+              </SectionHead>
               <div className="panel" style={{ padding: 0 }}>
-                <table className="data">
-                  <tbody>
-                    {s.topClickers.map((r: any) => (
-                      <tr key={r.email}>
-                        <td>{r.email}</td>
-                        <td className="num">{r.click_count}</td>
-                      </tr>
-                    ))}
-                    {!s.topClickers.length ? (
-                      <tr>
-                        <td>
-                          <Empty>없음</Empty>
-                        </td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                </table>
+                <PeopleTable rows={s.topClickers} countKey="click_count" />
               </div>
             </div>
           </div>
@@ -170,7 +135,375 @@ export default function CampaignStats() {
           </div>
         </>
       )}
+
+      {view?.kind === 'clickmap' ? (
+        <ClickMapModal
+          id={id!}
+          onClose={() => setView(null)}
+          onPick={(link) => setView({ kind: 'linkClicks', link })}
+        />
+      ) : null}
+      {view?.kind === 'links' ? (
+        <LinksModal
+          id={id!}
+          onClose={() => setView(null)}
+          onPick={(link) => setView({ kind: 'linkClicks', link })}
+        />
+      ) : null}
+      {view?.kind === 'linkClicks' ? (
+        <LinkClicksModal id={id!} link={view.link} onClose={() => setView(null)} />
+      ) : null}
+      {view?.kind === 'engagement' ? (
+        <EngagementModal id={id!} type={view.type} onClose={() => setView(null)} />
+      ) : null}
     </>
+  );
+}
+
+type View =
+  | null
+  | { kind: 'clickmap' }
+  | { kind: 'links' }
+  | { kind: 'linkClicks'; link: LinkRow }
+  | { kind: 'engagement'; type: 'open' | 'click' };
+
+/** 저장된 URL 은 퍼센트 인코딩이라 그대로 보이면 못 읽는다. */
+function prettyUrl(u: string): string {
+  try {
+    return decodeURI(u);
+  } catch {
+    return u;
+  }
+}
+
+interface LinkRow {
+  id: number;
+  url: string;
+  click_count: number;
+  unique_click_count: number;
+}
+
+function SectionHead({ title, children }: { title: string; children?: ReactNode }) {
+  return (
+    <div className="section-head">
+      <h2>{title}</h2>
+      <div className="spacer" />
+      {children}
+    </div>
+  );
+}
+
+/** 링크는 길어서 줄여 보여주고, 숫자 칸은 항상 보이게 고정한다. */
+function LinkTable({ rows, onPick }: { rows: LinkRow[]; onPick?: (l: LinkRow) => void }) {
+  if (!rows.length) return <Empty>클릭된 링크가 없습니다.</Empty>;
+  return (
+    <table className="data fit">
+      <thead>
+        <tr>
+          <th>링크</th>
+          <th className="num">클릭</th>
+          <th className="num">순 클릭</th>
+          {onPick ? <th /> : null}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((l) => (
+          <tr key={l.id}>
+            <td className="trunc mono" title={l.url}>
+              {prettyUrl(l.url)}
+            </td>
+            <td className="num">{fmtNum(l.click_count)}</td>
+            <td className="num">{fmtNum(l.unique_click_count)}</td>
+            {onPick ? (
+              <td className="num">
+                <button className="btn sm" onClick={() => onPick(l)} disabled={!l.click_count}>
+                  누가 눌렀나
+                </button>
+              </td>
+            ) : null}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function PeopleTable({ rows, countKey }: { rows: any[]; countKey: string }) {
+  if (!rows.length) return <Empty>없음</Empty>;
+  return (
+    <table className="data fit">
+      <tbody>
+        {rows.map((r) => (
+          <tr key={r.email}>
+            <td className="trunc" title={r.email}>
+              {r.email}
+            </td>
+            <td className="num">{fmtNum(r[countKey])}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+/**
+ * 클릭맵: 보낸 메일을 그대로 띄우고 링크 위에 클릭 수를 겹쳐 그린다.
+ * iframe 은 스크립트를 못 돌리게 막되(allow-same-origin 만) 부모가 앵커 위치를
+ * 잴 수 있게 열어 둔다. 클릭은 겹쳐 놓은 층에서 받는다.
+ */
+function ClickMapModal({
+  id,
+  onClose,
+  onPick,
+}: {
+  id: string;
+  onClose: () => void;
+  onPick: (l: LinkRow) => void;
+}) {
+  const [data, setData] = useState<any>(null);
+  const [err, setErr] = useState('');
+  const [marks, setMarks] = useState<any[]>([]);
+  const [showCold, setShowCold] = useState(false);
+  const frame = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    api(`/api/campaigns/${id}/clickmap`)
+      .then(setData)
+      .catch((e) => setErr(e.message));
+  }, [id]);
+
+  const measure = () => {
+    const f = frame.current;
+    const doc = f?.contentDocument;
+    if (!f || !doc || !data) return;
+    f.style.height = `${doc.documentElement.scrollHeight}px`;
+    const width = f.clientWidth;
+    const byId = new Map<string, any>(data.links.map((l: any) => [String(l.id), l]));
+    const out: any[] = [];
+    doc.querySelectorAll('[data-mr-link]').forEach((el) => {
+      const l = byId.get(el.getAttribute('data-mr-link') ?? '');
+      if (!l) return;
+      const r = (el as HTMLElement).getBoundingClientRect();
+      if (!r.width && !r.height) return;
+      // 오른쪽 끝 링크는 뱃지가 잘리므로 링크 안쪽으로 뒤집어 붙인다.
+      out.push({ ...l, top: r.top, left: r.left, w: r.width, h: r.height, flip: r.left + r.width + 72 > width });
+    });
+    setMarks(out);
+  };
+
+  useEffect(() => {
+    if (!data) return;
+    // 이미지가 늦게 뜨면 위치가 밀리므로 한 번 더 잰다.
+    const t = setTimeout(measure, 400);
+    window.addEventListener('resize', measure);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener('resize', measure);
+    };
+  }, [data]);
+
+  return (
+    <Modal title="클릭맵" onClose={onClose} size="xwide">
+      {err ? <Empty>{err}</Empty> : null}
+      {!data && !err ? <Empty>불러오는 중…</Empty> : null}
+      {data ? (
+        <>
+          <div className="toolbar" style={{ marginTop: 0 }}>
+            <span className="faint">
+              전체 클릭 {fmtNum(data.totalClicks)}회 · 링크를 누르면 누가 눌렀는지 볼 수 있습니다.
+            </span>
+            <div className="spacer" />
+            <label className="check" style={{ margin: 0 }}>
+              <input type="checkbox" checked={showCold} onChange={(e) => setShowCold(e.target.checked)} />
+              클릭 0회 링크도 표시
+            </label>
+          </div>
+          <div className="clickmap">
+            <iframe
+              ref={frame}
+              title="클릭맵"
+              sandbox="allow-same-origin"
+              srcDoc={data.html}
+              onLoad={measure}
+            />
+            <div className="clickmap-layer">
+              {marks
+                .filter((m) => showCold || m.click_count)
+                .map((m, i) => (
+                <div key={i}>
+                  <div
+                    className={`clickmap-box${m.click_count ? '' : ' cold'}`}
+                    style={{ top: m.top, left: m.left, width: m.w, height: m.h }}
+                    title={m.url}
+                    onClick={() => m.click_count && onPick(m)}
+                  />
+                  <div
+                    className={`clickmap-tag${m.click_count ? '' : ' cold'}${m.flip ? ' flip' : ''}`}
+                    style={{ top: m.top, left: m.left + m.w }}
+                    onClick={() => m.click_count && onPick(m)}
+                  >
+                    {fmtNum(m.click_count)} · {m.pct}%
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      ) : null}
+    </Modal>
+  );
+}
+
+function LinksModal({
+  id,
+  onClose,
+  onPick,
+}: {
+  id: string;
+  onClose: () => void;
+  onPick: (l: LinkRow) => void;
+}) {
+  const [d, setD] = useState<any>(null);
+  useEffect(() => {
+    api(`/api/campaigns/${id}/links`, { query: { limit: 500 } }).then(setD);
+  }, [id]);
+  return (
+    <Modal title="링크별 클릭" onClose={onClose} size="xwide">
+      {!d ? (
+        <Empty>불러오는 중…</Empty>
+      ) : (
+        <>
+          <p className="faint" style={{ marginTop: 0 }}>링크 {fmtNum(d.total)}개</p>
+          <div className="modal-table">
+            <LinkTable rows={d.links} onPick={onPick} />
+          </div>
+        </>
+      )}
+    </Modal>
+  );
+}
+
+function LinkClicksModal({ id, link, onClose }: { id: string; link: LinkRow; onClose: () => void }) {
+  const [d, setD] = useState<any>(null);
+  useEffect(() => {
+    api(`/api/campaigns/${id}/links/${link.id}/clicks`, { query: { limit: 500 } }).then(setD);
+  }, [id, link.id]);
+  return (
+    <Modal title="이 링크를 누른 사람" onClose={onClose} size="xwide">
+      <p className="mono faint" style={{ marginTop: 0, wordBreak: 'break-all' }}>{prettyUrl(link.url)}</p>
+      {!d ? (
+        <Empty>불러오는 중…</Empty>
+      ) : (
+        <>
+          <div className="toolbar" style={{ marginTop: 0 }}>
+            <span className="faint">
+              클릭 {fmtNum(d.total)}회 · 순 클릭 {fmtNum(link.unique_click_count)}명
+            </span>
+            <div className="spacer" />
+            <a className="btn sm" href={`/api/campaigns/${id}/links/${link.id}/clicks/export`}>
+              파일로 내보내기
+            </a>
+          </div>
+          <div className="modal-table">
+            <table className="data fit">
+              <thead>
+                <tr>
+                  <th>이메일</th>
+                  <th>이름</th>
+                  <th>클릭일</th>
+                  <th>환경</th>
+                </tr>
+              </thead>
+              <tbody>
+                {d.clicks.map((c: any, i: number) => (
+                  <tr key={i}>
+                    <td className="trunc" title={c.email}>
+                      {c.email}
+                    </td>
+                    <td className="trunc">{c.fields?.name ?? ''}</td>
+                    <td className="nowrap faint">{fmtDate(c.created_at)}</td>
+                    <td className="nowrap faint">
+                      {c.device === 'mobile' ? '모바일' : c.device === 'desktop' ? '데스크톱' : '기타'} · {c.client}
+                    </td>
+                  </tr>
+                ))}
+                {!d.clicks.length ? (
+                  <tr>
+                    <td colSpan={4}>
+                      <Empty>아직 클릭이 없습니다.</Empty>
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </Modal>
+  );
+}
+
+function EngagementModal({
+  id,
+  type,
+  onClose,
+}: {
+  id: string;
+  type: 'open' | 'click';
+  onClose: () => void;
+}) {
+  const [d, setD] = useState<any>(null);
+  useEffect(() => {
+    api(`/api/campaigns/${id}/engagement`, { query: { type, limit: 1000 } }).then(setD);
+  }, [id, type]);
+  const label = type === 'click' ? '클릭' : '오픈';
+  return (
+    <Modal title={`${label}한 구독자`} onClose={onClose} size="xwide">
+      {!d ? (
+        <Empty>불러오는 중…</Empty>
+      ) : (
+        <>
+          <div className="toolbar" style={{ marginTop: 0 }}>
+            <span className="faint">{fmtNum(d.total)}명</span>
+            <div className="spacer" />
+            <a className="btn sm" href={`/api/campaigns/${id}/engagement/export?type=${type}`}>
+              파일로 내보내기
+            </a>
+          </div>
+          <div className="modal-table">
+            <table className="data fit">
+              <thead>
+                <tr>
+                  <th>이메일</th>
+                  <th>이름</th>
+                  <th className="num">{label}(중복 포함)</th>
+                  <th>마지막 {label}일</th>
+                </tr>
+              </thead>
+              <tbody>
+                {d.rows.map((r: any, i: number) => (
+                  <tr key={i}>
+                    <td className="trunc" title={r.email}>
+                      {r.email}
+                    </td>
+                    <td className="trunc">{r.fields?.name ?? ''}</td>
+                    <td className="num">{fmtNum(r.count)}</td>
+                    <td className="nowrap faint">{fmtDate(r.last_at)}</td>
+                  </tr>
+                ))}
+                {!d.rows.length ? (
+                  <tr>
+                    <td colSpan={4}>
+                      <Empty>없습니다.</Empty>
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </Modal>
   );
 }
 

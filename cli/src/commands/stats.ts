@@ -81,5 +81,75 @@ export function statsCommand() {
       }
     });
 
+  cmd
+    .command('links <campaignId>')
+    .description('이메일 본문 링크별 클릭 수')
+    .option('--limit <n>', '개수', '50')
+    .option('--json', 'JSON 출력')
+    .action(async (campaignId, opts) => {
+      const res = await api<any>(`/api/campaigns/${campaignId}/links`, { query: { limit: opts.limit } });
+      if (opts.json) return console.log(json(res));
+      console.log(chalk.bold(`링크 ${res.total}개`));
+      console.log(
+        table(
+          res.links.map((l: any) => ({
+            ID: l.id,
+            링크: truncate(decodeURI(l.url), 60),
+            클릭: l.click_count,
+            '순 클릭': l.unique_click_count,
+          }))
+        )
+      );
+    });
+
+  cmd
+    .command('link-clicks <campaignId> <linkId>')
+    .description('그 링크를 누른 사람')
+    .option('--limit <n>', '개수', '100')
+    .option('--json', 'JSON 출력')
+    .action(async (campaignId, linkId, opts) => {
+      const res = await api<any>(`/api/campaigns/${campaignId}/links/${linkId}/clicks`, {
+        query: { limit: opts.limit },
+      });
+      if (opts.json) return console.log(json(res));
+      console.log(chalk.bold(truncate(decodeURI(res.link.url), 70)));
+      console.log(`클릭 ${res.total}회\n`);
+      console.log(
+        table(
+          res.clicks.map((c: any) => ({
+            이메일: c.email,
+            이름: c.fields?.name ?? '',
+            클릭일: when(c.created_at),
+            환경: `${c.device ?? ''} ${c.client ?? ''}`.trim(),
+          }))
+        )
+      );
+    });
+
+  cmd
+    .command('engagement <campaignId>')
+    .description('오픈·클릭한 구독자 목록')
+    .option('--type <type>', 'open | click', 'click')
+    .option('--limit <n>', '개수', '100')
+    .option('--json', 'JSON 출력')
+    .action(async (campaignId, opts) => {
+      const res = await api<any>(`/api/campaigns/${campaignId}/engagement`, {
+        query: { type: opts.type, limit: opts.limit },
+      });
+      if (opts.json) return console.log(json(res));
+      const label = res.type === 'click' ? '클릭' : '오픈';
+      console.log(chalk.bold(`${label}한 구독자 ${res.total}명`));
+      console.log(
+        table(
+          res.rows.map((r: any) => ({
+            이메일: r.email,
+            이름: r.fields?.name ?? '',
+            [`${label}(중복 포함)`]: r.count,
+            [`마지막 ${label}일`]: when(r.last_at),
+          }))
+        )
+      );
+    });
+
   return cmd;
 }

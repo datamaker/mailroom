@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, fmtDate } from '../api';
 import { Empty, Modal } from '../components/ui';
 
-type Tab = 'senders' | 'keys' | 'users' | 'suppressions';
+type Tab = 'senders' | 'utm' | 'keys' | 'users' | 'suppressions';
 
 export default function Settings() {
   const [tab, setTab] = useState<Tab>('senders');
@@ -13,6 +13,7 @@ export default function Settings() {
         {(
           [
             ['senders', '발신자 관리'],
+            ['utm', '링크 추적(UTM)'],
             ['keys', 'API 키'],
             ['users', '사용자 관리'],
             ['suppressions', '수신 차단'],
@@ -24,6 +25,7 @@ export default function Settings() {
         ))}
       </div>
       {tab === 'senders' ? <Senders /> : null}
+      {tab === 'utm' ? <Utm /> : null}
       {tab === 'keys' ? <Keys /> : null}
       {tab === 'users' ? <Users /> : null}
       {tab === 'suppressions' ? <Suppressions /> : null}
@@ -130,6 +132,78 @@ function Senders() {
         </table>
       </div>
     </>
+  );
+}
+
+/**
+ * 발송할 때 본문 링크에 자동으로 붙일 UTM.
+ * 본문에 손으로 적어 둔 값이 남아 통계가 갈라지는 걸 막으려고 기본은 덮어쓰기다.
+ */
+function Utm() {
+  const [f, setF] = useState<any>(null);
+  const [example, setExample] = useState('');
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    api('/api/settings/utm').then((r: any) => {
+      setF(r.utm);
+      setExample(r.example);
+    });
+  }, []);
+
+  const save = async () => {
+    const r: any = await api('/api/settings/utm', { method: 'PUT', body: f });
+    setF(r.utm);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+    api('/api/settings/utm').then((x: any) => setExample(x.example));
+  };
+
+  if (!f) return <Empty>불러오는 중…</Empty>;
+  const set = (k: string, v: any) => setF({ ...f, [k]: v });
+
+  return (
+    <div className="panel" style={{ maxWidth: 620 }}>
+      <label className="check">
+        <input type="checkbox" checked={f.enabled} onChange={(e) => set('enabled', e.target.checked)} />
+        발송할 때 본문 링크에 UTM 을 자동으로 붙입니다
+      </label>
+
+      <label className="field">
+        <span>utm_source</span>
+        <input value={f.source ?? ''} onChange={(e) => set('source', e.target.value)} placeholder="newsletter" />
+        <div className="hint">유입 출처. 보통 뉴스레터 이름이나 브랜드를 씁니다.</div>
+      </label>
+      <label className="field">
+        <span>utm_medium</span>
+        <input value={f.medium ?? ''} onChange={(e) => set('medium', e.target.value)} placeholder="email" />
+      </label>
+      <label className="field">
+        <span>utm_campaign</span>
+        <input value={f.campaign ?? ''} onChange={(e) => set('campaign', e.target.value)} placeholder="(비우면 이메일 이름)" />
+        <div className="hint">비워 두면 이메일마다 그 이메일의 이름이 들어갑니다.</div>
+      </label>
+      <label className="field">
+        <span>본문에 이미 UTM 이 있으면</span>
+        <select value={f.mode ?? 'overwrite'} onChange={(e) => set('mode', e.target.value)}>
+          <option value="overwrite">위 설정으로 덮어쓰기 (권장)</option>
+          <option value="fill">그대로 두기</option>
+        </select>
+        <div className="hint">
+          utm_term·utm_content 와 그 밖의 파라미터는 어느 쪽이든 건드리지 않습니다.
+        </div>
+      </label>
+
+      <label className="field">
+        <span>미리보기</span>
+        <div className="mono" style={{ wordBreak: 'break-all' }}>{decodeURIComponent(example || '')}</div>
+      </label>
+
+      <div className="toolbar">
+        <button className="btn primary" onClick={save}>저장</button>
+        {saved ? <span className="faint">저장했습니다.</span> : null}
+      </div>
+    </div>
   );
 }
 

@@ -1,4 +1,5 @@
 import { config } from '../config.js';
+import { applyUtm, UTM_DEFAULTS, type UtmConfig } from '../render/utm.js';
 import { many, one, query, tx } from '../db/pool.js';
 import { badRequest, notFound } from '../lib/errors.js';
 import { shortId } from '../lib/slug.js';
@@ -89,6 +90,15 @@ export function assertReady(
   if (!Array.isArray(c.content) || c.content.length === 0) throw badRequest('콘텐츠가 비어 있습니다.');
 }
 
+/** 캠페인 설정 → 워크스페이스 기본값 → 내장 기본값 순으로 UTM 을 정한다. */
+export async function resolveUtm(c: CampaignRow): Promise<UtmConfig> {
+  const row = await one<{ value: UtmConfig }>(`select value from settings where key = 'utm'`);
+  const cfg: UtmConfig = { ...UTM_DEFAULTS, ...(row?.value ?? {}), ...((c as any).utm ?? {}) };
+  // utm_campaign 을 비워 두면 캠페인 이름을 쓴다.
+  if (!cfg.campaign?.trim()) cfg.campaign = (c as any).name || c.subject || '';
+  return cfg;
+}
+
 /**
  * 콘텐츠를 발송용 HTML로 굳히고 추적 링크를 등록한다.
  * 이 시점 이후 캠페인 본문을 고쳐도 이미 나간 메일에는 영향이 없다.
@@ -103,6 +113,9 @@ export async function buildSendableHtml(c: CampaignRow) {
     mode: 'email',
     webviewUrl: webviewUrl(slug),
   });
+
+  // 링크 등록 전에 UTM 을 붙여야 campaign_links 와 실제 이동 주소가 같아진다.
+  html = applyUtm(html, await resolveUtm(c), config.publicUrl);
 
   if (c.track_clicks) {
     const links = extractLinks(html);
