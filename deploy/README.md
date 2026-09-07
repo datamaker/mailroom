@@ -71,6 +71,17 @@ MAILROOM_ASSET_BASE_URL=https://images.bioweekly.co.kr
 }
 ```
 
+보관 위치를 바꾼 뒤 이미 DB 에 들어와 있던 이미지는 따라 올려야 한다.
+`/a/<id>` 주소는 그대로라 발송된 메일과 웹 아카이브는 손댈 필요가 없다.
+
+```bash
+docker compose exec mailroom node server/dist/scripts/move-assets.js          # 미리보기
+docker compose exec mailroom node server/dist/scripts/move-assets.js --apply
+```
+
+`docker-compose.yml` 의 `environment:` 에 변수를 나열하는 구조라, `.env` 에만
+적으면 컨테이너까지 가지 않는다 — compose 파일에도 같이 넣어야 한다.
+
 SVG 는 받지 않는다. Gmail·Outlook 이 어차피 걸러 내는데, 주소로 직접 열면 스크립트가
 도는 저장형 XSS 통로만 남는다.
 
