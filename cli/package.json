@@ -1,10 +1,10 @@
 {
   "name": "@datasee/mailroom-cli",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "publishConfig": {
     "access": "public"
   },
-  "description": "CLI and MCP server for mailroom, the self-hosted newsletter platform. Manage address books, write newsletters in Markdown, send, and read delivery stats \u2014 or let Claude do it.",
+  "description": "CLI and MCP server for mailroom, the self-hosted newsletter platform. Manage address books, write newsletters in Markdown, send, and read delivery stats — or let Claude do it.",
   "keywords": [
     "newsletter",
     "email",

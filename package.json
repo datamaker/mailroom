@@ -1,8 +1,8 @@
 {
   "name": "mailroom",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
-  "description": "Self-hosted newsletter platform: address books, block editor, scheduled sends over SES, and delivery stats \u2014 driveable from a CLI and MCP.",
+  "description": "Self-hosted newsletter platform: address books, block editor, scheduled sends over SES, and delivery stats — driveable from a CLI and MCP.",
   "workspaces": [
     "server",
     "web",
