@@ -3,6 +3,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { api } from '../api.js';
+import { VERSION } from '../version.js';
 import { markdownToBlocks, wrapNewsletter } from '../markdown.js';
 
 /**
@@ -13,7 +14,7 @@ export function mcpCommand() {
   return new Command('mcp')
     .description('MCP 서버로 실행 (stdio) — AI 도구에서 mailroom 조작')
     .action(async () => {
-      const server = new McpServer({ name: 'mailroom', version: '0.1.0' });
+      const server = new McpServer({ name: 'mailroom', version: VERSION });
       registerTools(server);
       await server.connect(new StdioServerTransport());
     });

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
+import { VERSION } from './version.js';
 import chalk from 'chalk';
 import { ApiError } from './api.js';
 import { loginCommand, logoutCommand } from './commands/login.js';
@@ -17,7 +18,7 @@ const program = new Command();
 program
   .name('mailroom')
   .description('mailroom CLI — 사내 뉴스레터 주소록·발송·통계')
-  .version('0.1.0');
+  .version(VERSION);
 
 program.addCommand(loginCommand());
 program.addCommand(logoutCommand());

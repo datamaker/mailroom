@@ -8,6 +8,7 @@ import fastifyStatic from '@fastify/static';
 import multipart from '@fastify/multipart';
 
 import { assertProductionConfig, config } from './config.js';
+import { VERSION } from './version.js';
 import { migrate } from './db/migrate.js';
 import { pool } from './db/pool.js';
 import { initOidc } from './auth/oidc.js';
@@ -100,7 +101,7 @@ async function main() {
 
   app.get('/api/health', async () => {
     await pool.query('select 1');
-    return { ok: true, version: '0.1.0', provider: config.send.provider };
+    return { ok: true, version: VERSION, provider: config.send.provider };
   });
 
   await app.register(authRoutes);
