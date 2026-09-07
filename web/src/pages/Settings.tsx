@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, fmtDate } from '../api';
 import { Empty, Modal } from '../components/ui';
 
-type Tab = 'senders' | 'utm' | 'keys' | 'users' | 'suppressions';
+type Tab = 'senders' | 'utm' | 'alerts' | 'keys' | 'users' | 'suppressions';
 
 export default function Settings() {
   const [tab, setTab] = useState<Tab>('senders');
@@ -14,6 +14,7 @@ export default function Settings() {
           [
             ['senders', '발신자 관리'],
             ['utm', '링크 추적(UTM)'],
+            ['alerts', '알림'],
             ['keys', 'API 키'],
             ['users', '사용자 관리'],
             ['suppressions', '수신 차단'],
@@ -26,6 +27,7 @@ export default function Settings() {
       </div>
       {tab === 'senders' ? <Senders /> : null}
       {tab === 'utm' ? <Utm /> : null}
+      {tab === 'alerts' ? <Alerts /> : null}
       {tab === 'keys' ? <Keys /> : null}
       {tab === 'users' ? <Users /> : null}
       {tab === 'suppressions' ? <Suppressions /> : null}
@@ -202,6 +204,78 @@ function Utm() {
       <div className="toolbar">
         <button className="btn primary" onClick={save}>저장</button>
         {saved ? <span className="faint">저장했습니다.</span> : null}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 발송이 무너졌을 때 알릴 곳.
+ *
+ * 주소는 서버 환경변수로 둔다 — 화면에서 바꾸게 하면 웹훅 URL 이 곧 발송 권한인데
+ * 그게 DB 와 화면에 그대로 노출된다. 여기서는 연결됐는지 보고 눌러서 확인만 한다.
+ */
+function Alerts() {
+  const [s, setS] = useState<any>(null);
+  const [result, setResult] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api('/api/settings').then(setS);
+  }, []);
+
+  if (!s) return <Empty>불러오는 중…</Empty>;
+
+  const test = async () => {
+    setBusy(true);
+    setResult('');
+    try {
+      await api('/api/settings/alerts/test', { method: 'POST' });
+      setResult('보냈습니다. 슬랙 채널을 확인하세요.');
+    } catch (e: any) {
+      setResult(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="panel" style={{ maxWidth: 620 }}>
+      {s.alertsEnabled ? (
+        <div className="ok-box">알림 주소가 설정돼 있습니다.</div>
+      ) : (
+        <div className="warn-box">
+          알림 주소가 없습니다 — 발송이 무너져도 화면을 봐야만 알 수 있습니다.
+        </div>
+      )}
+
+      <h3>무엇을 알리나</h3>
+      <ul className="bullets">
+        <li>발송 완료 — 성공·실패 수와 실패 원인 상위 3개</li>
+        <li>발송 작업 최종 실패 — 재시도가 다 떨어졌을 때</li>
+        <li>스팸 신고 0.1% 초과 — SES 가 발송을 조이기 시작하는 선</li>
+      </ul>
+
+      <h3>설정하는 법</h3>
+      <ol className="bullets">
+        <li>
+          슬랙에서 <a href="https://api.slack.com/apps" target="_blank" rel="noreferrer">앱을 만들고</a>{' '}
+          Incoming Webhooks 를 켠 뒤 받을 채널을 고릅니다.
+        </li>
+        <li>
+          나온 주소를 서버 <code>.env</code> 의 <code>MAILROOM_ALERT_WEBHOOK</code> 에 넣습니다.
+        </li>
+        <li>서버를 다시 올리고 아래 버튼으로 확인합니다.</li>
+      </ol>
+      <div className="hint">
+        주소 자체가 그 채널에 글을 쓸 수 있는 권한이라 화면에서는 바꾸지 않습니다.
+      </div>
+
+      <div className="toolbar">
+        <button className="btn" onClick={test} disabled={busy || !s.alertsEnabled}>
+          {busy ? '보내는 중…' : '테스트 보내기'}
+        </button>
+        {result ? <span className="faint">{result}</span> : null}
       </div>
     </div>
   );

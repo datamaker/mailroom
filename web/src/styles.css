@@ -326,6 +326,10 @@ table.data.fit td.num, table.data.fit th.num { width: 1%; white-space: nowrap; }
 .check-item + .check-item { margin-top: 10px; }
 .check-item .hint { margin-top: 2px; white-space: pre-line; }
 
+
+.bullets { margin: 6px 0 14px; padding-left: 20px; font-size: 13.5px; line-height: 1.9; }
+.bullets code { background: var(--bg-sunken); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
+
 @media (max-width: 820px) {
   .app { flex-direction: column; }
 
