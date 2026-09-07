@@ -98,7 +98,7 @@ function ImageField({
       <input
         ref={input}
         type="file"
-        accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml"
+        accept="image/png,image/jpeg,image/gif,image/webp"
         style={{ display: 'none' }}
         onChange={(e) => {
           const f = e.target.files?.[0];

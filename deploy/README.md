@@ -43,3 +43,47 @@ docker compose up -d --build mailroom
 
 compose 프로젝트명이 디렉터리명에 묶여 있으니 **반드시 `/opt/mailroom` 에서** 올린다.
 다른 경로에서 올리면 볼륨이 새로 생겨 DB 가 빈 채로 뜬다.
+
+## 이미지 보관
+
+기본은 Postgres 의 `assets.data`(bytea) 다. 백업이 DB 하나로 끝나 소규모엔 편하지만,
+이미지가 늘면 S3 로 돌린다. 어느 쪽이든 `/a/<id>` 주소는 계속 살아 있어서
+**이미 발송된 메일의 이미지가 깨지지 않는다** — S3 모드에서는 그 주소가 CDN 으로 301 한다.
+
+```
+MAILROOM_ASSET_STORE=s3
+MAILROOM_ASSET_BUCKET=images.bioweekly.co.kr
+MAILROOM_ASSET_REGION=ap-northeast-2
+MAILROOM_ASSET_PREFIX=mailroom
+MAILROOM_ASSET_BASE_URL=https://images.bioweekly.co.kr
+```
+
+버킷은 퍼블릭 액세스가 전부 차단돼 있고 CloudFront(OAC)만 `s3:GetObject` 를 갖는다.
+**그 정책에 쓰기를 얹지 말 것** — 예전에 CDN 에 쓰기를 열어 익명 업로드가 뚫린 적이 있다.
+쓰기는 인스턴스 롤로만 한다. `cacheby-app-role` 인라인 정책에 필요한 문장:
+
+```json
+{
+  "Sid": "mailroomAssets",
+  "Effect": "Allow",
+  "Action": ["s3:PutObject", "s3:DeleteObject"],
+  "Resource": "arn:aws:s3:::images.bioweekly.co.kr/mailroom/*"
+}
+```
+
+SVG 는 받지 않는다. Gmail·Outlook 이 어차피 걸러 내는데, 주소로 직접 열면 스크립트가
+도는 저장형 XSS 통로만 남는다.
+
+## 외부 이미지 끌어오기
+
+이관해 온 뉴스레터는 이미지가 예전 서비스 CDN 을 가리킨다. 그쪽을 해지하면 지난
+뉴스레터와 웹 아카이브가 통째로 깨지므로 바이트를 우리 쪽으로 옮겨야 한다.
+
+```bash
+cd /opt/mailroom
+docker compose exec mailroom node server/dist/scripts/rehost-images.js          # 미리보기
+docker compose exec mailroom node server/dist/scripts/rehost-images.js --apply
+```
+
+템플릿의 `content` 와 캠페인의 `content`·`content_html`(웹 아카이브가 쓰는 발송 스냅샷)을
+모두 훑는다. 받아오지 못한 주소는 그대로 남기고 로그에 남긴다.

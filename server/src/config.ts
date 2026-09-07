@@ -54,6 +54,22 @@ export const config = {
     },
   },
 
+  /**
+   * 이메일에 넣는 이미지의 보관 위치.
+   *
+   * 'db' 는 바이트를 Postgres 에 담는다 — 백업이 DB 하나로 끝나 소규모엔 편하다.
+   * 's3' 는 버킷에 올리고 CDN 주소를 본문에 박는다. 이미지가 늘면 이쪽이 맞다.
+   * 어느 쪽이든 /a/<id> 주소는 계속 살아 있어 이미 보낸 메일이 깨지지 않는다.
+   */
+  assets: {
+    store: (env.MAILROOM_ASSET_STORE || 'db') as 'db' | 's3',
+    bucket: env.MAILROOM_ASSET_BUCKET || '',
+    region: env.MAILROOM_ASSET_REGION || env.AWS_REGION || 'ap-northeast-2',
+    prefix: (env.MAILROOM_ASSET_PREFIX || 'mailroom').replace(/^\/+|\/+$/g, ''),
+    /** 버킷 앞에 선 CDN 주소. 없으면 S3 기본 주소를 쓴다. */
+    baseUrl: (env.MAILROOM_ASSET_BASE_URL || '').replace(/\/$/, ''),
+  },
+
   /** SSO 없이 로컬에서 굴릴 때만. 프로덕션에서 켜면 인증이 통째로 열린다. */
   devAuthEmail: env.MAILROOM_DEV_AUTH_EMAIL || '',
 
