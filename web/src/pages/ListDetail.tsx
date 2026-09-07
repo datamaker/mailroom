@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { api, fmtDate, fmtNum } from '../api';
 import { Badge, Empty, Modal } from '../components/ui';
 
@@ -17,7 +17,10 @@ const TABS: Array<[Tab, string]> = [
 export default function ListDetail() {
   const { id } = useParams();
   const [data, setData] = useState<any>(null);
-  const [tab, setTab] = useState<Tab>('dashboard');
+  // ?sub= 로 들어오면(통계에서 사람을 눌러 넘어온 경우) 구독자 탭에서 시작한다.
+  const [tab, setTab] = useState<Tab>(
+    new URLSearchParams(window.location.search).has('sub') ? 'subscribers' : 'dashboard'
+  );
 
   const load = () => api(`/api/lists/${id}`).then(setData);
   useEffect(() => {
@@ -198,6 +201,9 @@ function SubscribersTab({ listId }: { listId: string }) {
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('subscribed');
   const [adding, setAdding] = useState(false);
+  // 통계 화면에서 사람을 눌러 넘어오면 ?sub= 로 바로 그 사람을 연다.
+  const [params, setParams] = useSearchParams();
+  const [opened, setOpened] = useState<string | null>(params.get('sub'));
   const [importing, setImporting] = useState(false);
 
   const load = () =>
@@ -256,7 +262,11 @@ function SubscribersTab({ listId }: { listId: string }) {
           <tbody>
             {rows.map((s) => (
               <tr key={s.id}>
-                <td>{s.email}</td>
+                <td>
+                  <a style={{ cursor: 'pointer' }} onClick={() => setOpened(s.id)}>
+                    {s.email}
+                  </a>
+                </td>
                 <td>
                   <Badge status={s.status} />
                 </td>
@@ -280,6 +290,20 @@ function SubscribersTab({ listId }: { listId: string }) {
         </table>
       </div>
 
+      {opened ? (
+        <SubscriberModal
+          listId={listId}
+          subId={opened}
+          onClose={() => {
+            setOpened(null);
+            if (params.has('sub')) {
+              params.delete('sub');
+              setParams(params, { replace: true });
+            }
+          }}
+        />
+      ) : null}
+
       {adding ? (
         <AddSubscriberModal
           listId={listId}
@@ -302,6 +326,129 @@ function SubscribersTab({ listId }: { listId: string }) {
     </>
   );
 }
+
+/**
+ * 구독자 한 명의 이력.
+ *
+ * "이 링크를 누가 눌렀나"에서 이름을 눌렀을 때 이어지는 화면이기도 하다.
+ * 평균은 최근 20통 기준 — 전체 평균은 오래된 발송에 끌려다녀서
+ * "요즘 이 사람이 우리 메일을 여는가"를 못 보여준다.
+ */
+function SubscriberModal({ listId, subId, onClose }: { listId: string; subId: string; onClose: () => void }) {
+  const [d, setD] = useState<any>(null);
+
+  useEffect(() => {
+    api(`/api/lists/${listId}/subscribers/${subId}`).then(setD);
+  }, [listId, subId]);
+
+  if (!d) {
+    return (
+      <Modal title="구독자" onClose={onClose} size="xwide">
+        <Empty>불러오는 중…</Empty>
+      </Modal>
+    );
+  }
+
+  const s = d.subscriber;
+  const p = d.performance ?? { sent: 0, opened: 0, clicked: 0 };
+  const rate = (n: number) => (p.sent ? `${Math.round((n / p.sent) * 1000) / 10}%` : '-');
+  const fields = Object.entries(s.fields ?? {}).filter(([, v]) => v !== null && v !== '');
+
+  return (
+    <Modal title={s.email} onClose={onClose} size="xwide">
+      <div className="toolbar" style={{ marginTop: 0 }}>
+        <Badge status={s.status} />
+        <span className="faint">구독일 {fmtDate(s.subscribed_at, false)}</span>
+        {d.groups?.length ? <span className="faint">· {d.groups.map((g: any) => g.name).join(', ')}</span> : null}
+      </div>
+
+      <h3>최근 성과</h3>
+      <p className="hint" style={{ marginTop: -6 }}>최근 받은 {fmtNum(p.sent)}통 기준</p>
+      <div className="row">
+        <div className="panel">
+          <div className="faint">발송한 이메일</div>
+          <strong style={{ fontSize: 22 }}>{fmtNum(p.sent)}</strong>
+        </div>
+        <div className="panel">
+          <div className="faint">오픈율</div>
+          <strong style={{ fontSize: 22 }}>{rate(p.opened)}</strong>
+        </div>
+        <div className="panel">
+          <div className="faint">클릭률</div>
+          <strong style={{ fontSize: 22 }}>{rate(p.clicked)}</strong>
+        </div>
+      </div>
+
+      {fields.length ? (
+        <>
+          <h3>정보</h3>
+          <div className="panel" style={{ padding: 0 }}>
+            <table className="data fit">
+              <tbody>
+                {fields.map(([k, v]) => (
+                  <tr key={k}>
+                    <td className="faint" style={{ width: 140 }}>
+                      {k}
+                    </td>
+                    <td className="trunc">{String(v)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : null}
+
+      <h3>활동</h3>
+      <div className="modal-table">
+        <table className="data fit">
+          <thead>
+            <tr>
+              <th style={{ width: 70 }}>구분</th>
+              <th>이메일</th>
+              <th>링크</th>
+              <th className="nowrap">일시</th>
+            </tr>
+          </thead>
+          <tbody>
+            {d.activity.map((a: any, i: number) => (
+              <tr key={i}>
+                <td>{EVENT_LABEL[a.type] ?? a.type}</td>
+                <td className="trunc" title={a.subject ?? ''}>
+                  {a.campaign_id ? (
+                    <Link to={`/emails/${a.campaign_id}`}>{a.subject ?? '(삭제됨)'}</Link>
+                  ) : (
+                    a.subject ?? ''
+                  )}
+                </td>
+                <td className="trunc mono" title={a.url ?? ''}>
+                  {a.url ? decodeURI(a.url) : ''}
+                </td>
+                <td className="nowrap faint">{fmtDate(a.created_at)}</td>
+              </tr>
+            ))}
+            {!d.activity.length ? (
+              <tr>
+                <td colSpan={4}>
+                  <Empty>아직 오픈·클릭 기록이 없습니다.</Empty>
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </Modal>
+  );
+}
+
+const EVENT_LABEL: Record<string, string> = {
+  open: '오픈',
+  click: '클릭',
+  delivered: '발송',
+  bounce: '반송',
+  complaint: '스팸신고',
+  unsubscribe: '수신거부',
+};
 
 function AddSubscriberModal({ listId, fields, onClose }: { listId: string; fields: any[]; onClose: () => void }) {
   const [values, setValues] = useState<Record<string, string>>({});

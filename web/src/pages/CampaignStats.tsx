@@ -167,6 +167,12 @@ type View =
   | { kind: 'linkClicks'; link: LinkRow }
   | { kind: 'engagement'; type: 'open' | 'click' };
 
+/** 구독자 상세로 이어 준다 — 목록에서 사람을 눌러 그 사람의 이력으로 넘어간다. */
+function Person({ row }: { row: { email: string; subscriber_id?: string; list_id?: string } }) {
+  if (!row.subscriber_id || !row.list_id) return <>{row.email}</>;
+  return <Link to={`/lists/${row.list_id}?sub=${row.subscriber_id}`}>{row.email}</Link>;
+}
+
 /** 저장된 URL 은 퍼센트 인코딩이라 그대로 보이면 못 읽는다. */
 function prettyUrl(u: string): string {
   try {
@@ -418,7 +424,7 @@ function LinkClicksModal({ id, link, onClose }: { id: string; link: LinkRow; onC
                 {d.clicks.map((c: any, i: number) => (
                   <tr key={i}>
                     <td className="trunc" title={c.email}>
-                      {c.email}
+                      <Person row={c} />
                     </td>
                     <td className="trunc">{c.fields?.name ?? ''}</td>
                     <td className="nowrap faint">{fmtDate(c.created_at)}</td>
@@ -484,7 +490,7 @@ function EngagementModal({
                 {d.rows.map((r: any, i: number) => (
                   <tr key={i}>
                     <td className="trunc" title={r.email}>
-                      {r.email}
+                      <Person row={r} />
                     </td>
                     <td className="trunc">{r.fields?.name ?? ''}</td>
                     <td className="num">{fmtNum(r.count)}</td>

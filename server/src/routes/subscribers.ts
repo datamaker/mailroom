@@ -142,13 +142,33 @@ export async function subscriberRoutes(app: FastifyInstance) {
     if (!sub) throw notFound('구독자를 찾을 수 없습니다.');
     const groups = await subscriberGroups(subId);
     const activity = await many(
-      `select e.type, e.url, e.created_at, c.subject
-         from events e left join campaigns c on c.id = e.campaign_id
+      // 클릭 이벤트는 url 을 따로 담지 않고 link_id 로만 가리킨다 — 조인해서 꺼낸다.
+      `select e.type, coalesce(e.url, l.url) as url, e.created_at, c.subject, c.id as campaign_id
+         from events e
+         left join campaigns c on c.id = e.campaign_id
+         left join campaign_links l on l.id = e.link_id
         where e.subscriber_id = $1
         order by e.created_at desc limit 50`,
       [subId]
     );
-    return { subscriber: sub, groups, activity };
+    // 최근 성과 — 이 사람이 받은 마지막 20통 기준. 전체 평균은 오래된 발송에
+    // 끌려다녀서 "요즘 이 사람이 우리 메일을 여는가"를 못 보여준다.
+    const performance = await one(
+      `with recent as (
+         select r.open_count, r.click_count
+           from campaign_recipients r
+           join campaigns c on c.id = r.campaign_id
+          where r.subscriber_id = $1 and r.status = 'sent'
+          order by r.sent_at desc nulls last
+          limit 20
+       )
+       select count(*)::int as sent,
+              count(*) filter (where open_count > 0)::int as opened,
+              count(*) filter (where click_count > 0)::int as clicked
+         from recent`,
+      [subId]
+    );
+    return { subscriber: sub, groups, activity, performance };
   });
 
   /** 단건/다건 추가. 화면의 "직접 추가하기"와 API 추가가 같은 경로를 쓴다. */

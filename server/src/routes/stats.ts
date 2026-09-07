@@ -147,7 +147,7 @@ export async function statsRoutes(app: FastifyInstance) {
     );
     const clicks = await many(
       `select e.created_at, e.device, e.os, e.client,
-              coalesce(s.email, r.email) as email, s.fields, s.id as subscriber_id
+              coalesce(s.email, r.email) as email, s.fields, s.id as subscriber_id, s.list_id
          from events e
          left join subscribers s on s.id = e.subscriber_id
          left join campaign_recipients r on r.id = e.recipient_id
@@ -180,7 +180,7 @@ export async function statsRoutes(app: FastifyInstance) {
     );
     const rows = await many(
       `select r.email, ${countCol} as count, ${atCol} as last_at,
-              s.id as subscriber_id, s.fields
+              s.id as subscriber_id, s.list_id, s.fields
          from campaign_recipients r
          left join subscribers s on s.id = r.subscriber_id
         where r.campaign_id = $1 and ${countCol} > 0
