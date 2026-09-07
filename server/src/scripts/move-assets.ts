@@ -7,12 +7,17 @@
  *
  *   node server/dist/scripts/move-assets.js          # 미리보기
  *   node server/dist/scripts/move-assets.js --apply
+ *
+ * --rewrite-content 를 같이 주면 템플릿·캠페인 본문의 /a/<id> 를 CDN 주소로 바꾼다.
+ * 안 바꿔도 동작은 하지만, 3만 명에게 보내면 이미지마다 우리 서버를 한 번씩
+ * 거치게 된다. 발송 스냅샷(content_html)은 그대로 둔다 — 그건 실제로 나간 내용이다.
  */
 import { config } from '../config.js';
 import { many, query } from '../db/pool.js';
 import { cdnUrl, put, s3Enabled } from '../storage/assets.js';
 
 const apply = process.argv.includes('--apply');
+const rewrite = process.argv.includes('--rewrite-content');
 
 async function run() {
   if (!s3Enabled()) {
@@ -51,6 +56,33 @@ async function run() {
   }
 
   if (apply) console.log(`\n옮김 ${moved}개, 실패 ${failed}개`);
+
+  if (rewrite) {
+    console.log('\n본문의 /a/<id> 를 CDN 주소로 바꿉니다.');
+    const onS3 = await many<{ id: string; object_key: string }>(
+      `select id, object_key from assets where storage = 's3' and object_key is not null`
+    );
+    let changed = 0;
+    for (const table of ['templates', 'campaigns'] as const) {
+      const rows = await many<{ id: string; content: string }>(
+        `select id, content::text as content from ${table}`
+      );
+      for (const row of rows) {
+        let text = row.content;
+        for (const a of onS3) {
+          text = text.split(`${config.publicUrl}/a/${a.id}`).join(cdnUrl(a.object_key));
+        }
+        if (text === row.content) continue;
+        changed++;
+        if (apply) {
+          JSON.parse(text); // 형태가 깨지지 않았는지 확인
+          await query(`update ${table} set content = $2::jsonb, updated_at = now() where id = $1`, [row.id, text]);
+        }
+      }
+    }
+    console.log(apply ? `본문 ${changed}건 갱신` : `본문 ${changed}건이 바뀝니다 (--apply 필요)`);
+  }
+
   process.exit(failed ? 1 : 0);
 }
 
