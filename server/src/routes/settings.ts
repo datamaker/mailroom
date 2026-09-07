@@ -6,6 +6,7 @@ import { currentUserId, requireAdmin, requireWrite } from '../auth/plugin.js';
 import { createApiKey } from '../auth/service.js';
 import { config } from '../config.js';
 import { UTM_DEFAULTS, tagUrl, type UtmConfig } from '../render/utm.js';
+import { alert, alertsEnabled } from '../lib/alert.js';
 
 export async function settingsRoutes(app: FastifyInstance) {
   // ---- 발신자 주소 ----
@@ -161,6 +162,14 @@ export async function settingsRoutes(app: FastifyInstance) {
     return { utm };
   });
 
+  /** 웹훅이 실제로 살아 있는지 눌러서 확인한다 — 사고가 났을 때 처음 시험할 순 없다. */
+  app.post('/api/settings/alerts/test', async (req) => {
+    requireAdmin(req);
+    if (!alertsEnabled()) throw badRequest('알림 주소가 설정돼 있지 않습니다 (MAILROOM_ALERT_WEBHOOK).');
+    await alert('info', '알림 테스트', ['이 메시지가 보이면 연결된 것입니다.']);
+    return { ok: true };
+  });
+
   app.get('/api/settings', async () => ({
     publicUrl: config.publicUrl,
     adminUrl: config.adminUrl,
@@ -169,6 +178,8 @@ export async function settingsRoutes(app: FastifyInstance) {
     rateLimit: config.send.rateLimit,
     sendLocked: config.send.lock,
     ssoEnabled: config.oidc.enabled,
+    alertsEnabled: alertsEnabled(),
+    assetStore: config.assets.store,
   }));
 }
 

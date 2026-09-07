@@ -98,3 +98,20 @@ docker compose exec mailroom node server/dist/scripts/rehost-images.js --apply
 
 템플릿의 `content` 와 캠페인의 `content`·`content_html`(웹 아카이브가 쓰는 발송 스냅샷)을
 모두 훑는다. 받아오지 못한 주소는 그대로 남기고 로그에 남긴다.
+
+## 알림
+
+발송은 3만 통이 30분에 걸쳐 나가므로 중간에 무너져도 화면을 안 보면 모른다.
+슬랙 incoming webhook 을 걸어 두면 발송 완료·실패·스팸 신고 급증을 알린다.
+
+```
+MAILROOM_ALERT_WEBHOOK=https://hooks.slack.com/services/...
+MAILROOM_ALERT_FAILURE_RATE=0.05   # 이 비율 넘게 실패하면 경고로 올린다
+```
+
+- 발송 완료 — 성공·실패 수와 실패 원인 상위 3개
+- 발송 작업 최종 실패 — 재시도가 다 떨어졌을 때
+- 스팸 신고 0.1% 초과 — SES 가 발송을 조이는 선
+
+설정 > 알림에서 "테스트 보내기"로 연결을 확인할 수 있다. 사고가 났을 때 처음
+시험하게 되면 늦다.

@@ -1,4 +1,5 @@
 import { config } from '../config.js';
+import { alert } from '../lib/alert.js';
 import { many, one, query } from '../db/pool.js';
 import { prepareCampaign, sendCampaignBatch } from '../send/campaign.js';
 import { scanAllAutomations, sendDueAutomations } from '../send/automation.js';
@@ -144,6 +145,11 @@ export function startWorker() {
               ]);
             }
             console.error(`[worker] job ${job.id} (${job.kind}) 최종 실패: ${message}`);
+            // 여기까지 왔으면 재시도가 다 떨어진 것이다 — 사람이 봐야 한다.
+            await alert('error', `발송 작업이 멈췄습니다 (${job.kind})`, [
+              message,
+              ...(job.campaign_id ? [`${config.adminUrl}/emails/${job.campaign_id}`] : []),
+            ]);
           } else {
             const backoff = new Date(Date.now() + Math.min(60_000, 2 ** job.attempts * 1000));
             await finish(job.id, 'pending', message, backoff);

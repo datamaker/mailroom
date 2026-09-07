@@ -1,4 +1,6 @@
 import type { FastifyInstance } from 'fastify';
+import { config } from '../config.js';
+import { alert, pct } from '../lib/alert.js';
 import { one, query } from '../db/pool.js';
 
 /**
@@ -112,6 +114,7 @@ async function handleSesEvent(msg: any) {
       if (recipient) {
         await recordEvent(recipient, 'complaint', { feedback: msg.complaint?.complaintFeedbackType });
         await query('update campaigns set complaint_count = complaint_count + 1 where id = $1', [recipient.campaign_id]);
+        await warnOnComplaintRate(recipient.campaign_id);
       }
       return;
     }
@@ -136,4 +139,27 @@ async function recordEvent(
     `insert into events (campaign_id, recipient_id, subscriber_id, type, meta) values ($1,$2,$3,$4,$5::jsonb)`,
     [recipient.campaign_id, recipient.id, recipient.subscriber_id, type, JSON.stringify(meta)]
   );
+}
+
+/**
+ * 스팸 신고 비율이 0.1% 를 넘으면 SES 가 발송을 조인다. 넘어서는 순간 한 번만 알린다
+ * (그 뒤로도 계속 오르면 신고가 들어올 때마다 울려서 시끄럽다).
+ */
+const COMPLAINT_LIMIT = 0.001;
+
+async function warnOnComplaintRate(campaignId: string) {
+  const c = await one<{ subject: string; sent_count: number; complaint_count: number }>(
+    'select subject, sent_count, complaint_count from campaigns where id = $1',
+    [campaignId]
+  );
+  if (!c || c.sent_count < 500) return; // 표본이 작으면 비율이 요동친다
+  const rate = c.complaint_count / c.sent_count;
+  const before = (c.complaint_count - 1) / c.sent_count;
+  if (rate <= COMPLAINT_LIMIT || before > COMPLAINT_LIMIT) return;
+
+  await alert('error', `스팸 신고가 한계를 넘었습니다: ${c.subject}`, [
+    `신고 ${c.complaint_count}건 / 발송 ${c.sent_count.toLocaleString('ko-KR')}통 (${pct(c.complaint_count, c.sent_count)})`,
+    'SES 는 0.1% 를 넘으면 발송을 조입니다. 대상과 동의 여부를 확인하세요.',
+    `${config.adminUrl}/emails/${campaignId}`,
+  ]);
 }

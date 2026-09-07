@@ -1,4 +1,5 @@
 import { config } from '../config.js';
+import { alert, pct } from '../lib/alert.js';
 import { applyUtm, UTM_DEFAULTS, type UtmConfig } from '../render/utm.js';
 import { many, one, query, tx } from '../db/pool.js';
 import { badRequest, notFound } from '../lib/errors.js';
@@ -279,13 +280,43 @@ export async function sendCampaignBatch(campaignId: string, batchSize = config.s
   );
 
   if (remaining === 0) {
-    await query(
-      `update campaigns set status = 'sent', send_finished_at = now(), updated_at = now() where id = $1`,
+    const done = await one<{ n: number; subject: string; sent_count: number; failed_count: number }>(
+      `update campaigns set status = 'sent', send_finished_at = now(), updated_at = now()
+        where id = $1 and status <> 'sent'
+       returning 1 as n, subject, sent_count, failed_count`,
       [campaignId]
     );
+    // returning 이 비면 다른 배치가 이미 마감한 것이다 — 알림을 두 번 보내지 않는다.
+    if (done) await announceFinished(campaignId, done);
   }
 
   return { sent, failed, remaining };
+}
+
+/** 발송이 끝났을 때 사람한테 알린다. 실패가 많으면 경고로 올린다. */
+async function announceFinished(
+  campaignId: string,
+  c: { subject: string; sent_count: number; failed_count: number }
+) {
+  const total = c.sent_count + c.failed_count;
+  const rate = total ? c.failed_count / total : 0;
+  const bad = rate > config.alertFailureRate;
+
+  const reasons = c.failed_count
+    ? await many<{ error: string; n: number }>(
+        `select coalesce(substring(error from 1 for 80), '(원인 없음)') as error, count(*)::int as n
+           from campaign_recipients where campaign_id = $1 and status = 'failed'
+          group by 1 order by 2 desc limit 3`,
+        [campaignId]
+      )
+    : [];
+
+  await alert(bad ? 'warn' : 'info', bad ? `발송 완료 — 실패가 많습니다: ${c.subject}` : `발송 완료: ${c.subject}`, [
+    `성공 ${c.sent_count.toLocaleString('ko-KR')}통`,
+    `실패 ${c.failed_count.toLocaleString('ko-KR')}통 (${pct(c.failed_count, total)})`,
+    ...reasons.map((r) => `${r.error} — ${r.n}건`),
+    `${config.adminUrl}/emails/${campaignId}`,
+  ]);
 }
 
 /** 정보통신망법: 영리 목적 광고성 메일은 제목에 (광고) 표기가 필요하다. */

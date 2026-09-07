@@ -4,6 +4,7 @@ import { badRequest, notFound } from '../lib/errors.js';
 import { currentUserId, requireWrite } from '../auth/plugin.js';
 import { shortId } from '../lib/slug.js';
 import { countAudience } from '../send/audience.js';
+import { preflight } from '../send/preflight.js';
 import { getCampaign, prefixAdSubject, renderCampaign, sendTestEmail } from '../send/campaign.js';
 import { sendLocked } from '../send/provider.js';
 import { config } from '../config.js';
@@ -242,42 +243,26 @@ export async function campaignRoutes(app: FastifyInstance) {
   });
 
   /** 발송 대상 규모와 사전 점검 결과 */
+  /** 기존 호출부(CLI·MCP)를 위해 문자열 목록 형태를 유지한다. */
   app.get('/api/campaigns/:id/audience', async (req) => {
     const { id } = req.params as { id: string };
     const c = await getCampaign(id);
-    if (!c.list_id) return { count: 0, issues: ['주소록이 선택되지 않았습니다.'] };
-    const count = await countAudience(c.list_id, c.target || {});
+    const r = await preflight(c);
+    return {
+      count: r.count,
+      issues: r.checks.filter((k) => k.level === 'error').map((k) => k.title),
+    };
+  });
 
-    const issues: string[] = [];
-    if (sendLocked()) {
-      issues.push(
-        `발송 잠금이 켜져 있습니다 — 실제 발송이 막혀 있습니다` +
-          (config.send.allowedRecipients.length
-            ? ` (허용: ${config.send.allowedRecipients.join(', ')})`
-            : '')
-      );
-    }
-    if (!c.subject.trim()) issues.push('제목이 비어 있습니다.');
-    if (!c.sender_email) issues.push('발신자 이메일 주소가 없습니다.');
-    if (!Array.isArray(c.content) || !c.content.length) issues.push('콘텐츠가 비어 있습니다.');
-    if (count === 0) issues.push('발송 대상이 0명입니다.');
-
-    const sender = c.sender_email
-      ? await one<{ verified: boolean }>('select verified from senders where lower(email) = lower($1)', [c.sender_email])
-      : null;
-    if (c.sender_email && !sender?.verified) issues.push(`발신자 ${c.sender_email} 이(가) 인증되지 않았습니다.`);
-
-    // 푸터 상자가 없어도 텍스트 안에 $%unsubscribe%$ 가 있으면 된다.
-    // (가져온 콘텐츠는 푸터를 텍스트 상자로 갖고 있는 경우가 많다)
-    const serialized = JSON.stringify(c.content ?? []);
-    const hasUnsubscribe =
-      serialized.includes('unsubscribe') || serialized.includes('"footer"');
-    if (!hasUnsubscribe) {
-      issues.push('수신거부 링크가 없습니다 — 푸터 상자를 넣거나 본문에 $%unsubscribe%$ 를 쓰세요.');
-    }
-    if (c.is_ad && !/^\(광고/.test(c.subject.trim())) issues.push('광고 메일이면 제목에 (광고)가 자동으로 붙습니다.');
-
-    return { count, issues };
+  /**
+   * 발송 전 점검. ?links=1 이면 본문의 링크가 실제로 열리는지도 본다
+   * (바깥 서버를 부르므로 몇 초 걸릴 수 있어 기본은 끈다).
+   */
+  app.get('/api/campaigns/:id/preflight', async (req) => {
+    const { id } = req.params as { id: string };
+    const q = req.query as Record<string, string>;
+    const c = await getCampaign(id);
+    return preflight(c, { links: q.links === '1' || q.links === 'true' });
   });
 
   app.post('/api/campaigns/:id/schedule', async (req) => {

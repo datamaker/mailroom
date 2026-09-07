@@ -317,6 +317,15 @@ table.data.fit td.num, table.data.fit th.num { width: 1%; white-space: nowrap; }
 .clickmap-tag.flip { transform: translate(calc(-100% - 4px), -6px); }
 .clickmap-tag.cold { background: #94a3b8; cursor: default; }
 
+
+/* 발송 전 점검 — 막는 것과 참고할 것을 색으로 가른다 */
+.note-box {
+  background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 12px 14px; font-size: 13px; margin-bottom: 12px;
+}
+.check-item + .check-item { margin-top: 10px; }
+.check-item .hint { margin-top: 2px; white-space: pre-line; }
+
 @media (max-width: 820px) {
   .app { flex-direction: column; }
 

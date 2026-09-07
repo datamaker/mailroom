@@ -455,14 +455,18 @@ function ContentTab({ c, patch }: { c: any; patch: (f: Record<string, any>) => v
 
 function SendTab({ c, save, onSent }: { c: any; save: () => Promise<void>; onSent: () => void }) {
   const [check, setCheck] = useState<any>(null);
+  const [checkingLinks, setCheckingLinks] = useState(false);
   const [testOpen, setTestOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  const refresh = () => api(`/api/campaigns/${c.id}/audience`).then(setCheck);
+  // 링크 확인은 바깥 서버를 부르므로 기본으로는 안 한다 — 누를 때만.
+  const refresh = (links = false) =>
+    api(`/api/campaigns/${c.id}/preflight${links ? '?links=1' : ''}`).then(setCheck);
+
   useEffect(() => {
-    save().then(refresh);
+    save().then(() => refresh());
   }, []);
 
   const send = async () => {
@@ -479,6 +483,9 @@ function SendTab({ c, save, onSent }: { c: any; save: () => Promise<void>; onSen
     }
   };
 
+  const errors = check?.checks.filter((k: any) => k.level === 'error') ?? [];
+  const warns = check?.checks.filter((k: any) => k.level !== 'error') ?? [];
+
   return (
     <div className="panel" style={{ maxWidth: 620 }}>
       <h3>발송 전 점검</h3>
@@ -490,15 +497,51 @@ function SendTab({ c, save, onSent }: { c: any; save: () => Promise<void>; onSen
             <div className="label">발송 대상</div>
             <div className="value">{check.count.toLocaleString('ko-KR')}</div>
           </div>
-          {check.issues.length ? (
+
+          {errors.length ? (
             <div className="warn-box">
-              {check.issues.map((i: string) => (
-                <div key={i}>· {i}</div>
+              {errors.map((k: any) => (
+                <div key={k.id} className="check-item">
+                  <strong>{k.title}</strong>
+                  {k.detail ? <div className="hint">{k.detail}</div> : null}
+                </div>
               ))}
             </div>
           ) : (
-            <div className="ok-box">문제 없습니다.</div>
+            <div className="ok-box">보낼 수 있습니다.</div>
           )}
+
+          {warns.length ? (
+            <div className="note-box">
+              {warns.map((k: any) => (
+                <div key={k.id} className="check-item">
+                  {k.title}
+                  {k.detail ? <div className="hint">{k.detail}</div> : null}
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="toolbar">
+            {check.linksChecked ? (
+              <span className="faint">본문 링크까지 확인했습니다.</span>
+            ) : (
+              <button
+                className="btn sm"
+                disabled={checkingLinks}
+                onClick={async () => {
+                  setCheckingLinks(true);
+                  try {
+                    await refresh(true);
+                  } finally {
+                    setCheckingLinks(false);
+                  }
+                }}
+              >
+                {checkingLinks ? '링크 확인 중…' : '본문 링크도 확인'}
+              </button>
+            )}
+          </div>
         </>
       )}
 
@@ -508,10 +551,15 @@ function SendTab({ c, save, onSent }: { c: any; save: () => Promise<void>; onSen
         <button className="btn" onClick={() => setTestOpen(true)}>
           테스트 발송
         </button>
-        <button className="btn dark" onClick={() => setScheduleOpen(true)}>
+        <button className="btn dark" onClick={() => setScheduleOpen(true)} disabled={!check?.canSend}>
           예약하기
         </button>
-        <button className="btn primary" onClick={send} disabled={busy || !check || check.count === 0}>
+        <button
+          className="btn primary"
+          onClick={send}
+          disabled={busy || !check?.canSend}
+          title={check && !check.canSend ? '위의 문제를 먼저 고쳐야 보낼 수 있습니다' : ''}
+        >
           지금 발송하기
         </button>
       </div>

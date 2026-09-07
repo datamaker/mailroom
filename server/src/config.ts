@@ -70,6 +70,15 @@ export const config = {
     baseUrl: (env.MAILROOM_ASSET_BASE_URL || '').replace(/\/$/, ''),
   },
 
+  /**
+   * 발송이 끝나거나 무너졌을 때 알릴 곳. 슬랙 incoming webhook 주소.
+   * 비워 두면 콘솔에만 남는다.
+   */
+  alertWebhook: env.MAILROOM_ALERT_WEBHOOK || '',
+
+  /** 이 비율을 넘게 실패하면 경고로 올린다. */
+  alertFailureRate: Number(env.MAILROOM_ALERT_FAILURE_RATE || 0.05),
+
   /** SSO 없이 로컬에서 굴릴 때만. 프로덕션에서 켜면 인증이 통째로 열린다. */
   devAuthEmail: env.MAILROOM_DEV_AUTH_EMAIL || '',
 
