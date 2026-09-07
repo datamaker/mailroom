@@ -30,9 +30,10 @@ const UPDATABLE = [
   'track_opens',
   'track_clicks',
   'public_visibility',
+  'utm',
 ];
 
-const JSON_COLUMNS = new Set(['content', 'styles', 'target', 'trigger']);
+const JSON_COLUMNS = new Set(['content', 'styles', 'target', 'trigger', 'utm']);
 
 export async function campaignRoutes(app: FastifyInstance) {
   app.get('/api/campaigns', async (req) => {
