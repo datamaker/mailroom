@@ -99,10 +99,13 @@ async function main() {
     return payload;
   });
 
-  app.get('/api/health', async () => {
+  const health = async () => {
     await pool.query('select 1');
     return { ok: true, version: VERSION, provider: config.send.provider };
-  });
+  };
+  app.get('/api/health', health);
+  // 컨테이너 헬스체크는 사내 서비스 전부 /healthz 로 맞춘다.
+  app.get('/healthz', health);
 
   await app.register(authRoutes);
   await app.register(listRoutes);

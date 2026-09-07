@@ -18,6 +18,7 @@ const PUBLIC_PREFIXES = [
   '/api/auth/oidc/',
   '/api/auth/cli/exchange',
   '/api/health',
+  '/healthz',
   '/t/',
   '/u/',
   '/p/',
