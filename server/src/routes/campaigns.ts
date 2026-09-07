@@ -179,6 +179,7 @@ export async function campaignRoutes(app: FastifyInstance) {
     return { campaign };
   });
 
+  /** 복사본은 목록에서 원본과 구분돼야 하므로 제목에 표시를 붙인다. */
   app.post('/api/campaigns/:id/duplicate', async (req) => {
     requireWrite(req);
     const { id } = req.params as { id: string };
@@ -187,7 +188,8 @@ export async function campaignRoutes(app: FastifyInstance) {
       `insert into campaigns (list_id, name, subject, preheader, sender_name, sender_email, reply_to,
                               content, styles, target, tags, is_ad, track_opens, track_clicks,
                               public_slug, created_by)
-       select list_id, name, subject, preheader, sender_name, sender_email, reply_to,
+       select list_id, name || ' (사본)', subject || ' (사본)', preheader,
+              sender_name, sender_email, reply_to,
               content, styles, target, tags, is_ad, track_opens, track_clicks, $2, $3
          from campaigns where id = $1
        returning *`,

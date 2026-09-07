@@ -106,7 +106,7 @@ export default function Emails() {
                     className="btn sm"
                     onClick={async () => {
                       const r: any = await api(`/api/campaigns/${c.id}/duplicate`, { method: 'POST' });
-                      nav(`/emails/${r.campaign.id}/edit`);
+                      nav(`/emails/${r.campaign.id}/edit?step=settings`);
                     }}
                   >
                     복사

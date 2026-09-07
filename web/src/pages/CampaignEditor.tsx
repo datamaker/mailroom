@@ -14,7 +14,10 @@ export default function CampaignEditor() {
   const [c, setC] = useState<any>(null);
   const [lists, setLists] = useState<any[]>([]);
   const [senders, setSenders] = useState<any[]>([]);
-  const [tab, setTab] = useState<Tab>('content');
+  // 새로 만들거나 복사한 직후에는 제목·주소록부터 정해야 하므로 발송 정보로 연다.
+  const [tab, setTab] = useState<Tab>(
+    (new URLSearchParams(window.location.search).get('step') as Tab) || 'content'
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [savedAt, setSavedAt] = useState<Date | null>(null);
