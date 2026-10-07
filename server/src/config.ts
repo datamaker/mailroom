@@ -99,6 +99,20 @@ export const config = {
     /** 초당 발송 상한. SES 계정 한도(us-east-1 = 14/s)보다 낮게 둔다. */
     rateLimit: int(env.MAILROOM_SEND_RATE, 12),
     batchSize: int(env.MAILROOM_SEND_BATCH, 200),
+    /**
+     * 동시에 기다리는 SES 호출 수. 서울→us-east-1 왕복이 한 통에 250ms 남짓이라
+     * 한 통씩 기다리면 rateLimit 과 상관없이 초당 4통에 묶인다.
+     */
+    concurrency: int(env.MAILROOM_SEND_CONCURRENCY, 8),
+    /**
+     * 반송 차단기. 발송 중 하드 바운스율이 rate 를 넘으면 캠페인을 일시중지한다.
+     * SES 는 5% 에서 검토, 10% 에서 계정 발송 중지 — 한 번의 나쁜 명단으로
+     * 계정 전체(회원가입 메일 포함)가 막히는 걸 막는다. 0 이면 끈다.
+     */
+    bounceGuard: {
+      rate: Number(env.MAILROOM_BOUNCE_GUARD ?? 0.03),
+      minSample: int(env.MAILROOM_BOUNCE_GUARD_MIN, 300),
+    },
     ses: {
       region: env.AWS_SES_REGION || env.AWS_REGION || 'us-east-1',
       configurationSet: env.AWS_SES_CONFIGURATION_SET || '',

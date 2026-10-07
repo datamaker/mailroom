@@ -220,8 +220,16 @@ export async function sendCampaignBatch(campaignId: string, batchSize = config.s
   let failed = 0;
   const interval = 1000 / Math.max(1, config.send.rateLimit);
 
-  for (const r of batch) {
-    const started = Date.now();
+  // 결과는 모았다가 한 번에 쓴다. 너무 오래 모으면 워커가 죽었을 때 '보냈는데
+  // 기록 안 된' 행이 reaper 에 의해 다시 나가므로 1초 남짓마다 비운다.
+  const results: Outcome[] = [];
+  const flushEvery = Math.max(10, config.send.rateLimit);
+  const flush = async () => {
+    if (!results.length) return;
+    await recordOutcomes(results.splice(0));
+  };
+
+  const sendOne = async (r: (typeof batch)[number]): Promise<Outcome> => {
     const links = {
       unsubscribe: r.subscriber_id ? unsubscribeUrl(r.subscriber_id) : '#',
       preferences: r.subscriber_id ? preferencesUrl(r.subscriber_id) : '#',
@@ -249,19 +257,56 @@ export async function sendCampaignBatch(campaignId: string, batchSize = config.s
 
     try {
       const res = await provider.send(msg);
-      await query(
-        `update campaign_recipients set status = 'sent', message_id = $2, sent_at = now(), error = null where id = $1`,
-        [r.id, res.messageId]
-      );
-      sent++;
+      return { id: r.id, status: 'sent', messageId: res.messageId };
     } catch (err) {
-      const message = (err as Error).message?.slice(0, 500) ?? 'unknown error';
-      await query(`update campaign_recipients set status = 'failed', error = $2 where id = $1`, [r.id, message]);
-      failed++;
+      // 한도 초과는 이 사람 탓이 아니다 — 실패로 굳히지 말고 큐로 돌린다.
+      if (isThrottle(err)) return { id: r.id, status: 'queued' };
+      return { id: r.id, status: 'failed', error: (err as Error).message?.slice(0, 500) ?? 'unknown error' };
     }
+  };
 
-    const elapsed = Date.now() - started;
-    if (elapsed < interval) await sleep(interval - elapsed);
+  // 시작 간격으로 rateLimit 을 지키고, 응답은 concurrency 개까지 겹쳐 기다린다.
+  const inflight = new Set<Promise<void>>();
+  let nextAt = Date.now();
+  let stopped: string | null = null;
+  let i = 0;
+
+  for (; i < batch.length; i++) {
+    if (i % flushEvery === 0) {
+      await flush();
+      stopped = await shouldStop(campaignId);
+      if (stopped) break;
+    }
+    while (inflight.size >= config.send.concurrency) await Promise.race(inflight);
+    const wait = nextAt - Date.now();
+    if (wait > 0) await sleep(wait);
+    // 밀렸을 때 몰아서 쏘지 않도록 지금 기준으로 다시 잡는다.
+    nextAt = Math.max(nextAt, Date.now()) + interval;
+
+    const r = batch[i];
+    const p = sendOne(r)
+      .catch((err): Outcome => ({ id: r.id, status: 'failed', error: String((err as Error)?.message ?? err).slice(0, 500) }))
+      .then((o) => {
+        results.push(o);
+        if (o.status === 'sent') sent++;
+        else if (o.status === 'failed') failed++;
+      });
+    const tracked = p.finally(() => inflight.delete(tracked));
+    inflight.add(tracked);
+  }
+  await Promise.all(inflight);
+  await flush();
+
+  // 멈췄으면 아직 안 보낸 행을 큐로 돌려 둔다 — 재개하면 거기서 이어진다.
+  if (stopped) {
+    const rest = batch.slice(i).map((r) => r.id);
+    if (rest.length) {
+      await query(
+        `update campaign_recipients set status = 'queued', sending_at = null
+          where id = any($1::bigint[]) and status = 'sending'`,
+        [rest]
+      );
+    }
   }
 
   const remainingRow = await one<{ count: number }>(
@@ -291,6 +336,72 @@ export async function sendCampaignBatch(campaignId: string, batchSize = config.s
   }
 
   return { sent, failed, remaining };
+}
+
+interface Outcome {
+  id: number;
+  status: 'sent' | 'failed' | 'queued';
+  messageId?: string;
+  error?: string;
+}
+
+/**
+ * 발송 결과를 한 번에 기록한다. 그 사이 웹훅이 먼저 'bounced' 로 바꿨을 수 있으니
+ * 'sending' 인 행만 상태를 덮는다 — message_id 는 어느 쪽이든 채운다.
+ */
+async function recordOutcomes(rows: Outcome[]) {
+  await query(
+    `update campaign_recipients r
+        set message_id = coalesce(v.message_id, r.message_id),
+            status     = case when r.status = 'sending' then v.status else r.status end,
+            error      = case when r.status = 'sending' then v.error else r.error end,
+            sent_at    = case when v.status = 'sent' then coalesce(r.sent_at, now()) else r.sent_at end,
+            sending_at = case when v.status = 'queued' then null else r.sending_at end
+       from unnest($1::bigint[], $2::text[], $3::text[], $4::text[]) as v(id, status, message_id, error)
+      where r.id = v.id`,
+    [rows.map((o) => o.id), rows.map((o) => o.status), rows.map((o) => o.messageId ?? null), rows.map((o) => o.error ?? null)]
+  );
+}
+
+/**
+ * 계속 보내도 되는지. 사람이 멈췄거나, 하드 바운스율이 차단 기준을 넘으면 멈춘다.
+ * 바운스는 발송 몇 초 뒤에 웹훅으로 들어오므로 실제 비율보다 조금 낮게 보인다.
+ */
+async function shouldStop(campaignId: string): Promise<string | null> {
+  const c = await one<{ status: string; subject: string; attempted: number; hard: number }>(
+    `select c.status, c.subject,
+            (select count(*) from campaign_recipients
+              where campaign_id = c.id and status in ('sent','bounced'))::int as attempted,
+            (select count(*) from events
+              where campaign_id = c.id and type = 'bounce' and (meta->>'hard')::boolean)::int as hard
+       from campaigns c where c.id = $1`,
+    [campaignId]
+  );
+  if (!c) return 'missing';
+  if (c.status !== 'sending') return c.status;
+
+  const { rate, minSample } = config.send.bounceGuard;
+  if (!rate || c.attempted < minSample || c.hard / c.attempted <= rate) return null;
+
+  // 조건부 update 라 동시에 여러 워커가 걸려도 알림은 한 번만 나간다.
+  const paused = await one(
+    `update campaigns set status = 'paused', updated_at = now() where id = $1 and status = 'sending' returning 1`,
+    [campaignId]
+  );
+  if (paused) {
+    await alert('error', `반송이 많아 발송을 멈췄습니다: ${c.subject}`, [
+      `하드 바운스 ${c.hard.toLocaleString('ko-KR')}건 / 발송 ${c.attempted.toLocaleString('ko-KR')}통 (${pct(c.hard, c.attempted)})`,
+      `기준 ${pct(rate, 1)} — SES 는 5% 에서 계정 검토, 10% 에서 발송 중지입니다.`,
+      '명단 출처를 확인하고 정리한 뒤 재개하세요. 반송된 주소는 이미 차단 목록에 들어갔습니다.',
+      `${config.adminUrl}/emails/${campaignId}`,
+    ]);
+  }
+  return 'bounce-guard';
+}
+
+function isThrottle(err: unknown) {
+  const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
+  return e?.name === 'TooManyRequestsException' || e?.name === 'ThrottlingException' || e?.$metadata?.httpStatusCode === 429;
 }
 
 /** 발송이 끝났을 때 사람한테 알린다. 실패가 많으면 경고로 올린다. */

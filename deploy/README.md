@@ -31,6 +31,12 @@ limit_req_zone $binary_remote_addr zone=mailroom_public:10m rate=20r/s;
   `https://mail.datasee.co.kr/api/webhooks/ses` 를 구독시킨다. 첫 요청의
   `SubscriptionConfirmation` 은 서버가 자동으로 확인한다(AWS 도메인만).
 - `MAILROOM_SEND_RATE` 는 계정 한도보다 낮게. 22,000명 발송은 12/s 기준 약 30분 걸린다.
+  응답을 기다리는 동안 `MAILROOM_SEND_CONCURRENCY`(기본 8)개까지 겹쳐 보낸다. 한 통씩 기다리면
+  서울→us-east-1 왕복(250ms 남짓)에 묶여 설정과 상관없이 초당 4통이 한계다.
+- 반송 차단기: 발송 중 하드 바운스율이 `MAILROOM_BOUNCE_GUARD`(기본 0.03)를 넘으면
+  (`MAILROOM_BOUNCE_GUARD_MIN` 통 이상 보낸 뒤) 캠페인을 일시중지하고 알린다. SES 는 5% 에서
+  계정 검토, 10% 에서 계정 발송 중지라 회원가입 메일까지 같이 막힌다. 재개해도 비율이 그대로면
+  바로 다시 멈춘다 — 명단을 정리하는 게 먼저다. 0 이면 끈다.
 
 ## 배포 절차 (cacheby-app)
 

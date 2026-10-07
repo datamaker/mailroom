@@ -1,6 +1,6 @@
 import { many, one } from '../db/pool.js';
 import { config } from '../config.js';
-import { countAudience } from './audience.js';
+import { countAudience, countNeverSent } from './audience.js';
 import { sendLocked } from './provider.js';
 import { SPECIAL_TAGS, usedTags } from '../render/merge.js';
 import { renderEmailHtml } from '../render/html.js';
@@ -31,6 +31,10 @@ export interface Preflight {
   canSend: boolean;
   linksChecked: boolean;
 }
+
+/** 이만큼 넘게, 이 비율 이상이 처음 보내는 주소면 경고한다. */
+const NEVER_SENT_MIN = 200;
+const NEVER_SENT_SHARE = 0.2;
 
 /** 구독자에게 기본으로 붙어 있는 값들 — 사용자 정의 필드가 아니어도 쓸 수 있다. */
 const BUILTIN_TAGS = ['email', 'name', 'id'];
@@ -95,6 +99,22 @@ export async function preflight(c: any, opts: { links?: boolean } = {}): Promise
   }
 
   // ---- 확인하는 게 좋다 ----
+  // 하드 바운스율이 5% 를 넘으면 SES 가 계정을 검토에 올리고, 10% 면 회원가입 메일까지 막힌다.
+  if (count > 0) {
+    const fresh = await countNeverSent(c.list_id, c.target || {});
+    if (fresh >= NEVER_SENT_MIN && fresh / count >= NEVER_SENT_SHARE) {
+      add(
+        'warn',
+        'never-sent',
+        `처음 보내는 주소가 ${fresh.toLocaleString('ko-KR')}명(${Math.round((fresh / count) * 100)}%)입니다.`,
+        '오래됐거나 확인되지 않은 명단이면 반송이 몰려 SES 계정 전체가 막힐 수 있습니다. ' +
+          '최근 활동한 사람부터 나눠 보내세요.' +
+          (config.send.bounceGuard.rate
+            ? ` 발송 중 하드 바운스가 ${Math.round(config.send.bounceGuard.rate * 100)}%를 넘으면 자동으로 멈춥니다.`
+            : '')
+      );
+    }
+  }
   if (c.is_ad && !/^\(광고/.test(subject)) {
     add('warn', 'ad-prefix', '광고 메일이라 제목 앞에 (광고)가 자동으로 붙습니다.');
   }

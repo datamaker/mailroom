@@ -178,3 +178,19 @@ export async function countAudience(listId: string, target: AudienceTarget) {
   );
   return row?.count ?? 0;
 }
+
+/**
+ * 대상 중 한 번도 발송을 시도해 본 적 없는 주소 수. 반송은 주로 여기서 나온다 —
+ * 한 번 보낸 주소는 하드 바운스였다면 이미 차단 목록에 들어가 있다.
+ */
+export async function countNeverSent(listId: string, target: AudienceTarget) {
+  const { where, params } = await buildAudienceQuery(listId, target);
+  const row = await one<{ count: number }>(
+    `select count(*)::int as count from subscribers s
+      where ${where}
+        and not exists (select 1 from campaign_recipients cr
+                         where lower(cr.email) = lower(s.email) and cr.status in ('sent','bounced'))`,
+    params
+  );
+  return row?.count ?? 0;
+}

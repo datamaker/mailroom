@@ -54,10 +54,21 @@ async function handleSesEvent(msg: any) {
   const messageId: string | undefined = msg.mail?.messageId;
   if (!type || !messageId) return;
 
-  const recipient = await one<{ id: number; campaign_id: string; subscriber_id: string | null; email: string }>(
-    'select id, campaign_id, subscriber_id, email from campaign_recipients where message_id = $1',
-    [messageId]
-  );
+  // 발송 결과는 묶어서 기록하므로 바운스가 message_id 보다 먼저 올 수 있다.
+  // 그때는 발송 때 붙인 태그로 찾는다.
+  type Recipient = { id: number; campaign_id: string; subscriber_id: string | null; email: string };
+  const tagged = Number(msg.mail?.tags?.mr_recipient?.[0]) || null;
+  const recipient =
+    (await one<Recipient>(
+      'select id, campaign_id, subscriber_id, email from campaign_recipients where message_id = $1',
+      [messageId]
+    )) ??
+    (tagged
+      ? await one<Recipient>(
+          'select id, campaign_id, subscriber_id, email from campaign_recipients where id = $1 and message_id is null',
+          [tagged]
+        )
+      : null);
 
   switch (type) {
     case 'Bounce': {
