@@ -37,6 +37,9 @@ mailroom campaigns send <id> --yes
 mailroom campaigns stats <id>
 
 mailroom templates ls
+mailroom templates show <templateId>                    # 상자(블록) 목록 — id·종류·앞부분
+mailroom templates export <templateId> --blocks t.json  # 상자 JSON 으로 뽑기
+mailroom campaigns create --list <listId> --subject "…" --blocks t.json   # 고친 JSON 으로 이메일 만들기
 mailroom templates import newsletter.html -n "주간 템플릿"
 mailroom auto ls
 mailroom stats overview --from 2026-01-01 --interval month
@@ -44,6 +47,20 @@ mailroom stats overview --from 2026-01-01 --interval month
 
 `--yes` 없이 `send` 를 부르면 대상 인원만 보여주고 아무것도 보내지 않는다.
 대부분의 명령에 `--json` 이 있다.
+
+## 템플릿에서 시작하기
+
+웹에서 만든 템플릿의 상자를 그대로 가져와 내용만 바꿔 넣을 때는 블록 JSON 을 쓴다.
+
+```bash
+mailroom templates show <templateId>                      # 어느 상자가 무엇인지 본다
+mailroom templates export <templateId> --blocks t.json    # 상자 배열을 파일로
+# t.json 의 text 상자 html 을 고친 뒤
+mailroom campaigns create --list <listId> --subject "…" --blocks t.json
+mailroom campaigns content <id> --blocks t.json           # 이미 만든 이메일의 본문 교체
+```
+
+상자마다 `paddingTop` / `paddingBottom` / `paddingX` (`none` 0 · `narrow` 10 · `normal` 20 · `wide` 40px) 로 여백을 조절한다.
 
 ## 마크다운으로 뉴스레터 쓰기
 

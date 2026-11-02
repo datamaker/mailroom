@@ -41,14 +41,44 @@ export function templatesCommand() {
     });
 
   cmd
+    .command('show <id>')
+    .description('템플릿 상자 목록 (id·종류·앞부분) — 어느 상자를 바꿀지 찾을 때')
+    .option('--json', '템플릿 전체를 JSON 으로')
+    .action(async (id, opts) => {
+      const { template } = await api<any>(`/api/templates/${id}`);
+      if (opts.json) return console.log(json(template));
+      const blocks: any[] = template.content ?? [];
+      console.log(chalk.bold(template.name), chalk.dim(template.id));
+      console.log(`상자 ${blocks.length}개 · 마지막수정 ${when(template.updated_at)}`);
+      console.log(
+        table(
+          blocks.map((b, i) => ({
+            순서: i,
+            ID: b.id,
+            종류: b.type,
+            내용: truncate(blockSummary(b), 60),
+          }))
+        )
+      );
+    });
+
+  cmd
     .command('export <id> [outFile]')
-    .description('템플릿을 HTML로 뽑기')
-    .action(async (id, outFile) => {
-      const { html } = await api<any>(`/api/templates/${id}/html`);
+    .description('템플릿을 HTML 로 뽑기 (--blocks 면 상자 JSON — 고쳐서 campaigns create --blocks 에 넣는다)')
+    .option('--blocks', '렌더된 HTML 대신 상자(블록) JSON 배열로')
+    .action(async (id, outFile, opts) => {
+      let out: string;
+      if (opts.blocks) {
+        const { template } = await api<any>(`/api/templates/${id}`);
+        out = JSON.stringify(template.content ?? [], null, 2) + '\n';
+      } else {
+        const { html } = await api<any>(`/api/templates/${id}/html`);
+        out = html;
+      }
       if (outFile) {
-        writeFileSync(outFile, html);
-        console.log(`${chalk.green('저장됨')} ${outFile}`);
-      } else process.stdout.write(html);
+        writeFileSync(outFile, out);
+        console.log(`${chalk.green('저장됨')} ${outFile} (${out.length} bytes)`);
+      } else process.stdout.write(out);
     });
 
   cmd
@@ -80,4 +110,36 @@ export function templatesCommand() {
     });
 
   return cmd;
+}
+
+/** 상자 한 줄 요약 — 텍스트 상자는 태그를 벗긴 본문, 나머지는 대표 속성 */
+function blockSummary(b: any): string {
+  switch (b.type) {
+    case 'text':
+    case 'html':
+      return stripTags(b.html ?? '');
+    case 'image':
+      return b.alt || b.src || '';
+    case 'button':
+      return `${b.text ?? ''} → ${b.href ?? ''}`;
+    case 'columns':
+      return `${b.columns?.length ?? 0}단 ${stripTags(b.columns?.map((c: any) => c.html ?? '').join(' ') ?? '')}`;
+    case 'webview':
+      return b.text ?? '';
+    case 'divider':
+    case 'spacer':
+    case 'footer':
+      return '';
+    default:
+      return JSON.stringify(b).slice(0, 60);
+  }
+}
+
+function stripTags(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }

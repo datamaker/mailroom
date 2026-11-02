@@ -118,21 +118,24 @@ function registerTools(server: McpServer) {
   server.tool(
     'mailroom_campaign_create',
     [
-      '마크다운으로 뉴스레터를 새로 만든다(초안 상태, 발송하지 않음).',
-      '지원 문법: # 제목, 본문 문단, - 목록, ![alt](이미지URL), [버튼문구](링크){.button}, --- 구분선.',
+      '뉴스레터를 새로 만든다(초안 상태, 발송하지 않음). 본문은 markdown 또는 blocks 중 하나로 준다.',
+      '마크다운 지원 문법: # 제목, 본문 문단, - 목록, ![alt](이미지URL), [버튼문구](링크){.button}, --- 구분선.',
+      'blocks 는 mailroom_template_get 이 돌려주는 content 와 같은 상자(블록) 배열 — 템플릿을 고쳐 그대로 넣을 때 쓴다.',
       '$%name%$ 같은 메일머지 태그를 넣으면 수신자별로 치환된다.',
     ].join(' '),
     {
       listId: z.string().describe('보낼 주소록 ID'),
       subject: z.string().describe('이메일 제목'),
-      markdown: z.string().describe('본문 마크다운'),
+      markdown: z.string().optional().describe('본문 마크다운 (blocks 와 둘 중 하나)'),
+      blocks: z.array(z.record(z.any())).optional().describe('본문 상자(블록) 배열 (markdown 과 둘 중 하나)'),
       senderName: z.string().optional(),
       senderEmail: z.string().optional(),
       tags: z.array(z.string()).optional(),
       isAd: z.boolean().optional().describe('광고성 이메일이면 true — 제목에 (광고)가 붙는다'),
     },
     async (args) => {
-      const content = wrapNewsletter(markdownToBlocks(args.markdown));
+      if (!args.markdown && !args.blocks) return fail('markdown 또는 blocks 중 하나가 필요합니다.');
+      const content = args.blocks ?? wrapNewsletter(markdownToBlocks(args.markdown!));
       return ok(
         await api('/api/campaigns', {
           method: 'POST',
@@ -152,18 +155,20 @@ function registerTools(server: McpServer) {
 
   server.tool(
     'mailroom_campaign_update',
-    '초안 이메일의 제목이나 본문(마크다운)을 고친다. 발송된 이메일은 수정할 수 없다.',
+    '초안 이메일의 제목이나 본문(markdown 또는 blocks)을 고친다. 발송된 이메일은 수정할 수 없다.',
     {
       campaignId: z.string(),
       subject: z.string().optional(),
       markdown: z.string().optional(),
+      blocks: z.array(z.record(z.any())).optional().describe('본문을 상자(블록) 배열로 통째로 교체'),
       tags: z.array(z.string()).optional(),
     },
     async (args) => {
       const body: Record<string, unknown> = {};
       if (args.subject) body.subject = args.subject;
       if (args.tags) body.tags = args.tags;
-      if (args.markdown) body.content = wrapNewsletter(markdownToBlocks(args.markdown));
+      if (args.blocks) body.content = args.blocks;
+      else if (args.markdown) body.content = wrapNewsletter(markdownToBlocks(args.markdown));
       if (!Object.keys(body).length) return fail('변경할 항목이 없습니다.');
       return ok(await api(`/api/campaigns/${args.campaignId}`, { method: 'PATCH', body }));
     }
@@ -279,6 +284,13 @@ function registerTools(server: McpServer) {
     '저장된 템플릿 목록. 이메일을 만들 때 서식으로 쓴다.',
     {},
     async () => ok(await api('/api/templates'))
+  );
+
+  server.tool(
+    'mailroom_template_get',
+    '템플릿 하나의 상자(블록) JSON. 상자를 고쳐 mailroom_campaign_create 의 content 로 넣을 때 쓴다.',
+    { templateId: z.string() },
+    async ({ templateId }) => ok(await api(`/api/templates/${templateId}`))
   );
 
   server.tool(
