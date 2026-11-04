@@ -49,7 +49,8 @@ export function Layout({ user, children }: Props) {
                 className="btn sm"
                 onClick={async () => {
                   await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
-                  window.location.href = '/';
+                  // local=1 이면 자동 SSO 로 바로 되돌아가지 않고 버튼 화면에 머문다
+                  window.location.href = '/?local=1';
                 }}
               >
                 로그아웃
