@@ -78,6 +78,9 @@ export async function statsRoutes(app: FastifyInstance) {
     );
 
     const denom = totals.sent || 1;
+    // 발송 도중엔 아직 안 나간 사람까지 분모에 넣으면 반송률이 실제보다 훨씬 낮게 보인다.
+    // SES 가 계정을 평가하는 방식과 같이 '실제로 나간 통수' 기준으로 본다.
+    const attempted = totals.sent + totals.bounced + (totals.failed ?? 0) || 1;
     return {
       campaign: {
         id: c.id,
@@ -94,11 +97,11 @@ export async function statsRoutes(app: FastifyInstance) {
       totals: {
         ...totals,
         ...evCounts,
-        delivery_rate: pct(totals.sent, totals.total),
+        delivery_rate: pct(totals.sent, attempted),
         open_rate: pct(totals.unique_opens, denom),
         click_rate: pct(totals.unique_clicks, denom),
         unsubscribe_rate: pct(evCounts.unsubscribes, denom),
-        bounce_rate: pct(totals.bounced, totals.total),
+        bounce_rate: pct(totals.bounced, attempted),
       },
       timeline,
       links,
