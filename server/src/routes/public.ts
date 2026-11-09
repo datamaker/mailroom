@@ -62,12 +62,18 @@ export async function publicRoutes(app: FastifyInstance) {
   // ---- 웹에서 보기 ----
   app.get('/w/:slug', async (req, reply) => {
     const { slug } = req.params as { slug: string };
-    const c = await one<{ content_html: string; subject: string; public_visibility: string; status: string }>(
-      'select content_html, subject, public_visibility, status from campaigns where public_slug = $1',
+    // 이 링크는 받은 메일 안에 들어 있다 — 한 통이라도 나갔으면 연다.
+    // 상태(sent)로 판단하면 발송이 끝나기 전 몇 시간 동안 먼저 받은 사람이 404를 본다.
+    // 자동 이메일은 status 가 active 라서 상태로는 아예 열리지 않는다.
+    const c = await one<{ content_html: string; public_visibility: string; delivered: boolean }>(
+      `select c.content_html, c.public_visibility,
+              exists (select 1 from campaign_recipients r
+                       where r.campaign_id = c.id and r.status in ('sent', 'bounced')) as delivered
+         from campaigns c where c.public_slug = $1`,
       [slug]
     );
     if (!c || !c.content_html) throw notFound('이메일을 찾을 수 없습니다.');
-    if (c.public_visibility !== 'public' && c.status !== 'sent') throw notFound('공개되지 않은 이메일입니다.');
+    if (c.public_visibility !== 'public' && !c.delivered) throw notFound('공개되지 않은 이메일입니다.');
     // 웹뷰에는 수신자가 없다. 추적 자리표시자를 비우고, 메일머지 태그도 지운다 —
     // 안 그러면 방문자에게 $%name%$ 같은 원본 태그가 그대로 보인다.
     const html = mergeTags(c.content_html.split('__MR_RCPT__').join('web'), {
