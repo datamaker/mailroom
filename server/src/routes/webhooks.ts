@@ -91,11 +91,16 @@ async function handleSesEvent(msg: any) {
         }
       }
       if (recipient) {
+        // 수신 서버가 돌려준 진단 코드를 남긴다 — '계정 없음'인지 '차단'인지는 이걸로만 구분된다.
+        const diagnostic: string | undefined = (msg.bounce?.bouncedRecipients ?? [])
+          .map((r: any) => r.diagnosticCode)
+          .find(Boolean)
+          ?.slice(0, 300);
         await query(`update campaign_recipients set status = 'bounced', error = $2 where id = $1`, [
           recipient.id,
-          msg.bounce?.bounceSubType ?? 'bounce',
+          [msg.bounce?.bounceSubType ?? 'bounce', diagnostic].filter(Boolean).join(': ').slice(0, 500),
         ]);
-        await recordEvent(recipient, 'bounce', { hard, subType: msg.bounce?.bounceSubType });
+        await recordEvent(recipient, 'bounce', { hard, subType: msg.bounce?.bounceSubType, diagnostic });
         // 발송 후에 바운스가 오므로 sent_count 를 같이 줄이지 않으면 두 수치가 어긋난다.
         await query(
           `update campaigns set bounce_count = bounce_count + 1,
