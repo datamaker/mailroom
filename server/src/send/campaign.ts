@@ -373,12 +373,12 @@ async function recordOutcomes(rows: Outcome[]) {
  * SES 계정 반송률은 계정 전체 대표 발송량 기준이라 이 숫자와 다르다 — 이쪽이 더 엄격하다.
  */
 async function shouldStop(campaignId: string): Promise<string | null> {
-  const c = await one<{ status: string; subject: string; attempted: number; hard: number; total_hard: number; total_attempted: number }>(
+  const c = await one<{ status: string; subject: string; bounce_guard: number | null; attempted: number; hard: number; total_hard: number; total_attempted: number }>(
     `with win as (
        select coalesce(c.guard_since, c.send_started_at, '-infinity'::timestamptz) as since
          from campaigns c where c.id = $1
      )
-     select c.status, c.subject,
+     select c.status, c.subject, c.bounce_guard,
             (select count(*) from campaign_recipients r, win
               where r.campaign_id = c.id and r.status in ('sent','bounced') and r.sent_at >= win.since)::int as attempted,
             (select count(*) from events e join campaign_recipients r on r.id = e.recipient_id, win
@@ -394,7 +394,9 @@ async function shouldStop(campaignId: string): Promise<string | null> {
   if (!c) return 'missing';
   if (c.status !== 'sending') return c.status;
 
-  const { rate, minSample } = config.send.bounceGuard;
+  // 캠페인에 기준이 따로 있으면 그걸 쓴다 (0 이면 이 캠페인은 끈다).
+  const rate = c.bounce_guard ?? config.send.bounceGuard.rate;
+  const { minSample } = config.send.bounceGuard;
   if (!rate || c.attempted < minSample || c.hard / c.attempted <= rate) return null;
 
   // 조건부 update 라 동시에 여러 워커가 걸려도 알림은 한 번만 나간다.
