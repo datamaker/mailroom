@@ -25,6 +25,19 @@ export async function enqueue(kind: string, campaignId: string | null, payload: 
   return row!.id;
 }
 
+/**
+ * 같은 캠페인에 같은 종류의 작업이 이미 대기·실행 중이면 또 넣지 않는다.
+ * 재개 버튼을 연타하거나 예약 승격과 겹쳐도 발송 작업은 하나만 돈다.
+ */
+export async function enqueueOnce(kind: string, campaignId: string, payload: Record<string, unknown> = {}) {
+  const dup = await one<{ id: number }>(
+    `select id from send_jobs where kind = $1 and campaign_id = $2 and status in ('pending','running') limit 1`,
+    [kind, campaignId]
+  );
+  if (dup) return dup.id;
+  return enqueue(kind, campaignId, payload);
+}
+
 async function claim(): Promise<Job | null> {
   const { rows } = await query<Job>(
     `update send_jobs
@@ -100,12 +113,23 @@ async function promoteScheduled() {
 
 /** 워커가 죽어 'sending'에 갇힌 수신자를 되돌린다. */
 async function reapStuckRecipients() {
+  // SES 가 이미 받았다는 흔적(배달 이벤트, 또는 결과 기록이 반쯤 된 message_id)이 있으면
+  // 큐로 돌리지 않는다 — 돌리면 같은 사람에게 두 번 나간다. 그런 행은 '보냄'으로 마감한다.
+  await query(
+    `update campaign_recipients r
+        set status = 'sent', sending_at = null,
+            sent_at = coalesce(r.sent_at, (select min(e.created_at) from events e where e.recipient_id = r.id), now())
+      where r.status = 'sending'
+        and coalesce(r.sending_at, r.created_at) < now() - interval '15 minutes'
+        and (r.message_id is not null
+             or exists (select 1 from events e where e.recipient_id = r.id and e.type in ('delivered','open','click')))`
+  );
   // sending_at 기준이어야 한다 — created_at 은 발송 준비 시각이라 긴 발송에서
   // 정상 진행 중인 배치까지 되돌려 같은 사람에게 두 번 나간다.
   await query(
     `update campaign_recipients
         set status = 'queued', sending_at = null
-      where status = 'sending' and sent_at is null
+      where status = 'sending' and sent_at is null and message_id is null
         and coalesce(sending_at, created_at) < now() - interval '15 minutes'`
   );
   await query(

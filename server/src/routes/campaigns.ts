@@ -10,7 +10,7 @@ import { sendLocked } from '../send/provider.js';
 import { config } from '../config.js';
 import { renderEmailHtml } from '../render/html.js';
 import { usedTags } from '../render/merge.js';
-import { enqueue } from '../jobs/worker.js';
+import { enqueueOnce } from '../jobs/worker.js';
 import { TRIGGER_LABELS, scanAutomation, validateTrigger, type Trigger } from '../send/automation.js';
 
 const UPDATABLE = [
@@ -289,12 +289,12 @@ export async function campaignRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     await assertSendable(id);
     const campaign = await one(
-      `update campaigns set status = 'sending', scheduled_at = null, updated_at = now()
+      `update campaigns set status = 'sending', scheduled_at = null, guard_since = now(), updated_at = now()
         where id = $1 and status in ('draft','scheduled','paused') returning *`,
       [id]
     );
     if (!campaign) throw badRequest('발송할 수 없는 상태입니다.');
-    await enqueue('send_campaign', id);
+    await enqueueOnce('send_campaign', id);
     return { campaign };
   });
 
@@ -314,11 +314,13 @@ export async function campaignRoutes(app: FastifyInstance) {
     requireWrite(req);
     const { id } = req.params as { id: string };
     const campaign = await one(
-      `update campaigns set status = 'sending', updated_at = now() where id = $1 and status = 'paused' returning *`,
+      // 차단기 기준 시각을 지금으로 — 멈추기 전 구간의 반송은 재개 판단에 다시 세지 않는다.
+      `update campaigns set status = 'sending', guard_since = now(), updated_at = now()
+        where id = $1 and status = 'paused' returning *`,
       [id]
     );
     if (!campaign) throw badRequest('재개할 수 없는 상태입니다.');
-    await enqueue('send_batch', id);
+    await enqueueOnce('send_batch', id);
     return { campaign };
   });
 

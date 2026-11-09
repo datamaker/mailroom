@@ -167,7 +167,8 @@ export async function prepareCampaign(campaignId: string) {
   await query(
     `update campaigns
         set content_html = $2, public_slug = $3, total_count = $4,
-            status = 'sending', send_started_at = coalesce(send_started_at, now()), updated_at = now()
+            status = 'sending', send_started_at = coalesce(send_started_at, now()),
+            guard_since = now(), updated_at = now()
       where id = $1`,
     [c.id, html, slug, total?.count ?? 0]
   );
@@ -366,14 +367,27 @@ async function recordOutcomes(rows: Outcome[]) {
 /**
  * 계속 보내도 되는지. 사람이 멈췄거나, 하드 바운스율이 차단 기준을 넘으면 멈춘다.
  * 바운스는 발송 몇 초 뒤에 웹훅으로 들어오므로 실제 비율보다 조금 낮게 보인다.
+ *
+ * 비율은 guard_since(발송 시작·재개 시각) 이후에 나간 메일만 센다. 캠페인 누적으로
+ * 재면 한 번 멈춘 캠페인은 명단을 정리해도 옛 반송이 분자에 남아 재개 즉시 또 멈춘다.
+ * SES 계정 반송률은 계정 전체 대표 발송량 기준이라 이 숫자와 다르다 — 이쪽이 더 엄격하다.
  */
 async function shouldStop(campaignId: string): Promise<string | null> {
-  const c = await one<{ status: string; subject: string; attempted: number; hard: number }>(
-    `select c.status, c.subject,
+  const c = await one<{ status: string; subject: string; attempted: number; hard: number; total_hard: number; total_attempted: number }>(
+    `with win as (
+       select coalesce(c.guard_since, c.send_started_at, '-infinity'::timestamptz) as since
+         from campaigns c where c.id = $1
+     )
+     select c.status, c.subject,
+            (select count(*) from campaign_recipients r, win
+              where r.campaign_id = c.id and r.status in ('sent','bounced') and r.sent_at >= win.since)::int as attempted,
+            (select count(*) from events e join campaign_recipients r on r.id = e.recipient_id, win
+              where e.campaign_id = c.id and e.type = 'bounce' and (e.meta->>'hard')::boolean
+                and r.sent_at >= win.since)::int as hard,
             (select count(*) from campaign_recipients
-              where campaign_id = c.id and status in ('sent','bounced'))::int as attempted,
+              where campaign_id = c.id and status in ('sent','bounced'))::int as total_attempted,
             (select count(*) from events
-              where campaign_id = c.id and type = 'bounce' and (meta->>'hard')::boolean)::int as hard
+              where campaign_id = c.id and type = 'bounce' and (meta->>'hard')::boolean)::int as total_hard
        from campaigns c where c.id = $1`,
     [campaignId]
   );
@@ -389,10 +403,12 @@ async function shouldStop(campaignId: string): Promise<string | null> {
     [campaignId]
   );
   if (paused) {
+    const resumed = c.total_attempted > c.attempted;
     await alert('error', `반송이 많아 발송을 멈췄습니다: ${c.subject}`, [
-      `하드 바운스 ${c.hard.toLocaleString('ko-KR')}건 / 발송 ${c.attempted.toLocaleString('ko-KR')}통 (${pct(c.hard, c.attempted)})`,
+      `하드 바운스 ${c.hard.toLocaleString('ko-KR')}건 / 발송 ${c.attempted.toLocaleString('ko-KR')}통 (${pct(c.hard, c.attempted)})` +
+        (resumed ? ` — 재개 이후 구간. 캠페인 누적 ${c.total_hard.toLocaleString('ko-KR')} / ${c.total_attempted.toLocaleString('ko-KR')} (${pct(c.total_hard, c.total_attempted)})` : ''),
       `기준 ${pct(rate, 1)} — SES 는 5% 에서 계정 검토, 10% 에서 발송 중지입니다.`,
-      '명단 출처를 확인하고 정리한 뒤 재개하세요. 반송된 주소는 이미 차단 목록에 들어갔습니다.',
+      '명단 출처를 확인하고 정리한 뒤 재개하세요. 반송된 주소는 이미 차단 목록에 들어갔습니다. 재개하면 비율은 그 시점부터 다시 셉니다.',
       `${config.adminUrl}/emails/${campaignId}`,
     ]);
   }
