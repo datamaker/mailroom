@@ -13,7 +13,8 @@ Object.assign(process.env, {
   DATABASE_URL: TEST_DB,
   MAILROOM_SECRET: 'test-secret',
   MAILROOM_PUBLIC_URL: 'http://localhost:9200',
-  MAILROOM_ADMIN_URL: 'http://localhost:9200',
+  // 공개 주소와 관리 주소를 다르게 둔다 — CORS 가 관리 오리진만 허용하는지 가려내려면 달라야 한다.
+  MAILROOM_ADMIN_URL: 'http://admin.localhost:9200',
   MAILROOM_SEND_PROVIDER: 'console',
   MAILROOM_WORKER: '0',
   // 인증 우회가 켜져 있으면 인증 테스트가 전부 무의미해진다.
@@ -23,6 +24,9 @@ Object.assign(process.env, {
   OIDC_ISSUER: '',
   OIDC_CLIENT_ID: '',
   OIDC_CLIENT_SECRET: '',
+  // 계정 상태 조회는 테스트가 가짜 fetch 를 끼울 때만 켠다.
+  GATEHOUSE_STATUS_URL: '',
+  GATEHOUSE_STATUS_SECRET: '',
 });
 
 import type { BuildAppOptions } from '../src/app.js';

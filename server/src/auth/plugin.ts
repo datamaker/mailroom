@@ -56,6 +56,15 @@ const NON_API_ROUTES: ReadonlySet<string> = new Set(['/*', '*']);
 /** 신원이 없어도 200 을 돌려줘야 하는 곳 (로그인 화면이 상태를 물어본다). */
 const ANONYMOUS_OK: ReadonlySet<string> = new Set(['/api/auth/me', '/api/auth/logout']);
 
+/**
+ * POST 지만 아무것도 바꾸지 않는 라우트(본문이 커서 POST 를 쓸 뿐). 읽기 전용 키도 부를 수 있다.
+ * 여기 없는 GET/HEAD 외 요청은 쓰기 권한이 있는 키만 통과한다.
+ */
+const READ_ONLY_POST: ReadonlySet<string> = new Set(['/api/render/preview', '/api/lists/:id/audience/count']);
+
+/** 알려진 API 키 권한. 키를 만들 때 이 밖의 값은 받지 않는다. */
+export const API_KEY_SCOPES = ['read', 'write', 'admin'] as const;
+
 /** 라우터가 고른 패턴. 매칭된 라우트가 없으면(404) undefined. */
 export function matchedRoute(req: FastifyRequest): string | undefined {
   if (req.is404) return undefined;
@@ -81,6 +90,12 @@ export async function authPlugin(app: FastifyInstance) {
       const token = raw.trim();
       const actor = await actorFromApiKey(token);
       if (actor) {
+        // 읽기 전용 키가 쓰기 라우트에 닿지 못하게 한 곳에서 막는다. 핸들러마다 requireWrite 를
+        // 부르고 있지만, 새 라우트에서 빼먹어도 열리지 않게 하려는 이중 장치다.
+        const readOnlyCall = req.method === 'GET' || req.method === 'HEAD' || READ_ONLY_POST.has(route);
+        if (!readOnlyCall && !actor.scopes.includes('write') && !actor.scopes.includes('admin')) {
+          throw forbidden('쓰기 권한이 없는 API 키입니다.');
+        }
         req.actor = actor;
         return;
       }

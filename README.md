@@ -50,6 +50,7 @@ SSO 없이 혼자 볼 때는 `.env.dev` 에 `MAILROOM_DEV_AUTH_EMAIL=you@datasee
 | `MAILROOM_PUBLIC_URL` | 추적·구독 링크에 박히는 주소. **인터넷에서 열려야 한다** |
 | `MAILROOM_SECRET` | 추적/구독 토큰 서명 키. 바뀌면 발송된 메일의 링크가 전부 무효 |
 | `OIDC_ISSUER` / `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` | gatehouse SSO |
+| `GATEHOUSE_STATUS_URL` / `GATEHOUSE_STATUS_SECRET` | gatehouse 계정 상태 조회(`GET /internal/account`). 둘 다 있으면 SSO 세션을 검증할 때마다(이메일별 60초 캐시) 물어, gatehouse 에서 비활성화·세션 종료한 사용자의 브라우저·CLI 세션을 끊는다. 하나라도 없으면 꺼진다 |
 | `MAILROOM_ADMIN_EMAILS` | 첫 로그인 시 owner 로 올릴 이메일 |
 | `MAILROOM_SEND_PROVIDER` | `ses`(기본) · `smtp` · `console` |
 | `MAILROOM_SEND_RATE` | 초당 발송 상한. SES 계정 한도보다 낮게 |

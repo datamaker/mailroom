@@ -4,6 +4,7 @@ import { randomToken } from '../lib/crypto.js';
 import { page } from '../lib/page.js';
 import { escapeHtml } from '../render/html.js';
 import { formatFrom, mailProvider } from './provider.js';
+import { applySubscriberChanges, type PendingChanges } from '../lib/subscribers.js';
 
 /**
  * 구독 확인 이메일(더블 옵트인).
@@ -13,7 +14,16 @@ import { formatFrom, mailProvider } from './provider.js';
 
 const TTL_HOURS = 72;
 
-export async function sendConfirmEmail(listId: string, subscriberId: string, email: string) {
+/**
+ * changes 는 신청할 때 적어 낸 필드·광고 수신 동의다. 토큰에 실어 두었다가 확인 버튼을
+ * 눌렀을 때만 구독자에게 반영한다 — 신청만으로는 기존 구독자 정보가 바뀌지 않는다.
+ */
+export async function sendConfirmEmail(
+  listId: string,
+  subscriberId: string,
+  email: string,
+  changes: PendingChanges = {}
+) {
   const list = await one<{
     name: string;
     default_sender_name: string | null;
@@ -34,9 +44,9 @@ export async function sendConfirmEmail(listId: string, subscriberId: string, ema
 
   const token = randomToken(24);
   await query(
-    `insert into subscriber_tokens (token, list_id, subscriber_id, kind, expires_at)
-     values ($1, $2, $3, 'confirm', now() + ($4 || ' hours')::interval)`,
-    [token, listId, subscriberId, String(TTL_HOURS)]
+    `insert into subscriber_tokens (token, list_id, subscriber_id, kind, expires_at, payload)
+     values ($1, $2, $3, 'confirm', now() + ($4 || ' hours')::interval, $5::jsonb)`,
+    [token, listId, subscriberId, String(TTL_HOURS), JSON.stringify(changes)]
   );
 
   const url = `${config.publicUrl}/c/${token}`;
@@ -77,13 +87,27 @@ export async function confirmSubscription(token: string) {
     return { ok: false as const, reason: 'expired' as const };
   }
 
+  // 먼저 토큰을 소모한다. 동시에 두 번 눌러도 한 번만 통한다.
+  const claimed = await one<{ payload: PendingChanges | null }>(
+    `update subscriber_tokens set used_at = now()
+      where token = $1 and kind = 'confirm' and used_at is null
+      returning payload`,
+    [token]
+  );
+  if (!claimed) return { ok: false as const, reason: 'used' as const };
+
   await query(
     `update subscribers
-        set status = 'subscribed', subscribed_at = now(), unsubscribed_at = null, updated_at = now()
+        set status = 'subscribed',
+            subscribed_at = case when status = 'subscribed' then subscribed_at else now() end,
+            unsubscribed_at = null, updated_at = now()
       where id = $1`,
     [row.subscriber_id]
   );
-  await query('update subscriber_tokens set used_at = now() where token = $1', [token]);
+  // 신청할 때 적어 낸 내용은 주소의 주인이 확인한 지금에야 반영한다.
+  if (claimed.payload && Object.keys(claimed.payload).length) {
+    await applySubscriberChanges(row.subscriber_id, row.list_id, claimed.payload);
+  }
 
   const sub = await one<{ email: string; list_name: string }>(
     `select s.email, l.name as list_name from subscribers s join lists l on l.id = s.list_id where s.id = $1`,

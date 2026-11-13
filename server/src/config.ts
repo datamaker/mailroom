@@ -55,6 +55,15 @@ export const config = {
   },
 
   /**
+   * gatehouse 계정 상태 조회(회수 전파). 둘 다 있어야 켜진다 — 하나라도 없으면 지금처럼 동작한다.
+   * 켜면 gatehouse 에서 비활성화·세션 종료한 사용자의 메일룸 세션이 1분 안에 끊긴다.
+   */
+  gatehouse: {
+    statusUrl: (env.GATEHOUSE_STATUS_URL || '').replace(/\/+$/, ''),
+    statusSecret: env.GATEHOUSE_STATUS_SECRET || '',
+  },
+
+  /**
    * 이메일에 넣는 이미지의 보관 위치.
    *
    * 'db' 는 바이트를 Postgres 에 담는다 — 백업이 DB 하나로 끝나 소규모엔 편하다.
@@ -156,6 +165,9 @@ export function assertProductionConfig(log: (msg: string) => void) {
   }
   if (config.send.provider === 'ses' && config.sns.topicArns.length === 0) {
     log('MAILROOM_SNS_TOPIC_ARNS 미설정 — SES 웹훅이 서명만 맞으면 어떤 SNS 토픽이든 받습니다.');
+  }
+  if (config.oidc.enabled && Boolean(config.gatehouse.statusUrl) !== Boolean(config.gatehouse.statusSecret)) {
+    log('GATEHOUSE_STATUS_URL·GATEHOUSE_STATUS_SECRET 중 하나만 설정됨 — 계정 상태 조회가 꺼져 있습니다.');
   }
   if (config.devAuthEmail && process.env.NODE_ENV === 'production') {
     log(`MAILROOM_DEV_AUTH_EMAIL이 프로덕션에서 켜져 있습니다(${config.devAuthEmail}). 인증이 우회됩니다.`);

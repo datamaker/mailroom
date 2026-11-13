@@ -45,9 +45,7 @@ export async function verifyCliIdToken(idToken: string): Promise<OidcIdentity> {
     issuer: provider.serverMetadata().issuer,
     audience: config.oidc.cliClientId,
   });
-  const email = String(payload.email ?? '').toLowerCase();
-  if (!email) throw new Error('ID 토큰에 email 클레임이 없습니다.');
-  return { email, name: String(payload.name ?? email) };
+  return identityFromClaims(payload);
 }
 
 export function redirectUri() {
@@ -90,10 +88,18 @@ export async function handleCallback(
     pkceCodeVerifier: codeVerifier,
     expectedState: state,
   });
-  const claims = tokens.claims();
-  if (!claims?.email) throw new Error('ID 토큰에 email 클레임이 없습니다.');
-  return {
-    email: String(claims.email).toLowerCase(),
-    name: String(claims.name ?? claims.email),
-  };
+  return identityFromClaims(tokens.claims() ?? {});
+}
+
+/**
+ * ID 토큰 클레임에서 신원을 꺼낸다. 웹 로그인과 CLI 로그인이 같은 기준을 쓴다.
+ *
+ * 우리는 이메일로 사용자를 찾는다. IdP 가 "이 이메일은 확인됐다"고 말해 주지 않으면
+ * (email_verified 가 true 가 아니면) 남의 주소를 적어 넣은 계정으로 그 사람이 될 수 있다.
+ */
+export function identityFromClaims(claims: Record<string, unknown>): OidcIdentity {
+  const email = typeof claims.email === 'string' ? claims.email.trim().toLowerCase() : '';
+  if (!email) throw new Error('ID 토큰에 email 클레임이 없습니다.');
+  if (claims.email_verified !== true) throw new Error('확인되지 않은 이메일입니다(email_verified).');
+  return { email, name: typeof claims.name === 'string' && claims.name ? claims.name : email };
 }

@@ -12,7 +12,8 @@ import { VERSION } from './version.js';
 import { pool } from './db/pool.js';
 import { authPlugin, matchedRoute } from './auth/plugin.js';
 import { HttpError } from './lib/errors.js';
-import { authRoutes } from './routes/auth.js';
+import { authRoutes, type AuthRouteOptions } from './routes/auth.js';
+import { configureGatehouseStatus, type GatehouseStatusOptions } from './auth/gatehouseStatus.js';
 import { listRoutes } from './routes/lists.js';
 import { subscriberRoutes } from './routes/subscribers.js';
 import { campaignRoutes } from './routes/campaigns.js';
@@ -32,6 +33,10 @@ export interface BuildAppOptions {
   webDist?: string;
   /** SES 웹훅이 바깥으로 나가는 부분(인증서 조회 등). 테스트에서 갈아 끼운다. */
   webhook?: WebhookOptions;
+  /** 웹 SSO 가 IdP 와 주고받는 부분. 테스트에서 갈아 끼운다. */
+  auth?: AuthRouteOptions;
+  /** gatehouse 계정 상태 조회 설정. 테스트가 가짜 fetch 를 끼운다. 없으면 환경변수대로. */
+  gatehouse?: GatehouseStatusOptions;
   /** 등록되는 라우트를 전부 받아 본다 — 테스트가 "공개 라우트 목록"을 통째로 대조하는 데 쓴다. */
   onRoute?: (route: { method: string | string[]; url: string }) => void;
 }
@@ -51,13 +56,15 @@ export async function buildApp(opts: BuildAppOptions = {}) {
     useSemicolonDelimiter: false,
   });
   if (opts.onRoute) app.addHook('onRoute', opts.onRoute);
+  if (opts.gatehouse) configureGatehouseStatus(opts.gatehouse);
 
   await app.register(cookie);
   // origin:true + credentials 는 어떤 사이트에서든 인증된 요청을 보낼 수 있게 반사한다.
   // 우리 UI 는 같은 오리진에서 뜨므로 알고 있는 오리진만 허용한다.
-  const allowedOrigins = new Set(
-    [config.adminUrl, config.publicUrl, ...(config.corsOrigins ?? [])].filter(Boolean)
-  );
+  // 공개 주소(publicUrl)는 넣지 않는다 — 그 오리진은 가져온 HTML(웹에서 보기)을 내보내는 곳이라,
+  // 거기서 도는 스크립트가 관리자 쿠키를 실어 API 를 부를 수 있게 해 줄 이유가 없다.
+  // (관리 주소와 공개 주소가 같은 배포에서는 adminUrl 로 그대로 허용된다.)
+  const allowedOrigins = new Set([config.adminUrl, ...(config.corsOrigins ?? [])].filter(Boolean));
   await app.register(cors, {
     credentials: true,
     origin(origin, cb) {
@@ -99,14 +106,20 @@ export async function buildApp(opts: BuildAppOptions = {}) {
   // register() 로 감싸면 훅이 그 플러그인 스코프에만 걸린다 — 루트에 직접 붙인다.
   await authPlugin(app);
 
-  // 공개 경로가 내보내는 HTML(웹뷰·구독폼·수신거부)에 최소한의 보안 헤더를 건다.
+  // 공개 경로가 내보내는 HTML(웹뷰·구독폼·수신거부)에 보안 헤더를 건다.
   // 콘텐츠 자체는 사내 사용자가 만들지만, 가져온 HTML 에 뭐가 섞여 있을지는 알 수 없다.
   app.addHook('onSend', async (req, reply, payload) => {
-    // 원본 URL 이 아니라 매칭된 라우트로 본다 — `/%77/…` 처럼 인코딩해서 헤더를 피할 수 없게.
-    if (!/^\/(w|s|u|p|c)\//.test(matchedRoute(req) ?? '')) return payload;
+    // 응답 종류를 브라우저가 추측하지 않게 한다 — JSON·CSV 가 HTML 로 해석되는 일을 막는다.
     reply.header('x-content-type-options', 'nosniff');
+    // 원본 URL 이 아니라 매칭된 라우트로 본다 — `/%77/…` 처럼 인코딩해서 헤더를 피할 수 없게.
+    const route = matchedRoute(req) ?? '';
+    if (!/^\/(w|s|u|p|c)\//.test(route)) return payload;
     reply.header('referrer-policy', 'no-referrer');
     reply.header('x-frame-options', 'DENY');
+    // 웹에서 보기는 가져온 HTML 을 그대로 내보낸다. 관리 UI 와 같은 오리진일 수 있으므로
+    // 스크립트를 끄고, sandbox 로 오리진을 떼어 낸다(쿠키·같은 오리진 API 에 닿지 못한다).
+    // 링크(새 창 포함)·스타일·이미지·폼은 그대로 동작한다.
+    reply.header('content-security-policy', route === '/w/:slug' ? WEBVIEW_CSP : PUBLIC_PAGE_CSP);
     return payload;
   });
 
@@ -118,7 +131,7 @@ export async function buildApp(opts: BuildAppOptions = {}) {
   // 컨테이너 헬스체크는 사내 서비스 전부 /healthz 로 맞춘다.
   app.get('/healthz', health);
 
-  await app.register(authRoutes);
+  await app.register(authRoutes, opts.auth ?? {});
   await app.register(listRoutes);
   await app.register(subscriberRoutes);
   await app.register(campaignRoutes);
@@ -144,6 +157,13 @@ export async function buildApp(opts: BuildAppOptions = {}) {
 
   return app;
 }
+
+/** 공개 HTML 공통: 스크립트·플러그인·<base> 금지, 폼은 우리 서버로만. */
+export const PUBLIC_PAGE_CSP = "script-src 'none'; object-src 'none'; base-uri 'none'; form-action 'self'";
+/** 웹에서 보기: 위에 더해 오리진 없는 sandbox. allow-scripts·allow-same-origin 은 주지 않는다. */
+export const WEBVIEW_CSP =
+  `${PUBLIC_PAGE_CSP}; sandbox allow-popups allow-popups-to-escape-sandbox allow-forms ` +
+  'allow-top-navigation-by-user-activation';
 
 /**
  * 404 를 JSON 으로 줄지 SPA(index.html)로 줄지 가른다. 여기는 이미 어떤 라우트에도

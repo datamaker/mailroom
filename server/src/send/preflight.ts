@@ -4,6 +4,7 @@ import { countAudience, countNeverSent } from './audience.js';
 import { sendLocked } from './provider.js';
 import { SPECIAL_TAGS, usedTags } from '../render/merge.js';
 import { renderEmailHtml } from '../render/html.js';
+import { BlockedAddressError, probeUrl } from '../lib/safe-fetch.js';
 
 /**
  * 발송 전 점검.
@@ -198,20 +199,15 @@ async function checkLinks(urls: string[]): Promise<Array<{ url: string; reason: 
 }
 
 async function probe(url: string): Promise<string | null> {
-  const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), 6000);
   try {
-    // HEAD 를 막아 둔 서버가 많아 안 되면 GET 으로 한 번 더 본다.
-    let res = await fetch(url, { method: 'HEAD', redirect: 'follow', signal: ac.signal });
-    if (res.status === 405 || res.status === 501) {
-      res = await fetch(url, { method: 'GET', redirect: 'follow', signal: ac.signal });
-    }
+    // 내부 주소 차단·리다이렉트 홉별 재검사·짧은 타임아웃은 probeUrl 이 한다.
+    const status = await probeUrl(url);
     // 403 은 봇을 막는 것뿐인 경우가 흔해 죽었다고 단정하지 않는다.
-    if (res.status >= 400 && res.status !== 403 && res.status !== 429) return `HTTP ${res.status}`;
+    if (status >= 400 && status !== 403 && status !== 429) return `HTTP ${status}`;
     return null;
   } catch (e: any) {
+    // 사내망·메타데이터 주소는 요청 자체를 하지 않는다 — 열리는지 알려 주지도 않는다.
+    if (e instanceof BlockedAddressError) return '내부 주소라 확인하지 않음';
     return e.name === 'AbortError' ? '응답 없음' : '연결 실패';
-  } finally {
-    clearTimeout(timer);
   }
 }

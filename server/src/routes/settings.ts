@@ -2,11 +2,13 @@ import type { FastifyInstance } from 'fastify';
 import { promises as dns } from 'node:dns';
 import { many, one, query } from '../db/pool.js';
 import { badRequest, notFound } from '../lib/errors.js';
-import { currentUserId, requireAdmin, requireWrite } from '../auth/plugin.js';
+import { API_KEY_SCOPES, currentUserId, requireAdmin, requireWrite } from '../auth/plugin.js';
 import { createApiKey } from '../auth/service.js';
 import { config } from '../config.js';
 import { UTM_DEFAULTS, tagUrl, type UtmConfig } from '../render/utm.js';
 import { alert, alertsEnabled } from '../lib/alert.js';
+
+const USER_ROLES = ['owner', 'admin', 'member'];
 
 export async function settingsRoutes(app: FastifyInstance) {
   // ---- 발신자 주소 ----
@@ -66,7 +68,11 @@ export async function settingsRoutes(app: FastifyInstance) {
     requireAdmin(req);
     const b = (req.body ?? {}) as Record<string, any>;
     if (!b.name) throw badRequest('키 이름이 필요합니다.');
-    const scopes: string[] = Array.isArray(b.scopes) && b.scopes.length ? b.scopes : ['read', 'write'];
+    const scopes: string[] =
+      Array.isArray(b.scopes) && b.scopes.length ? [...new Set<string>(b.scopes)] : ['read', 'write'];
+    if (!scopes.every((x) => (API_KEY_SCOPES as readonly unknown[]).includes(x))) {
+      throw badRequest(`알 수 없는 권한입니다. 쓸 수 있는 값: ${API_KEY_SCOPES.join(', ')}`);
+    }
     // 평문 키는 이 응답에서만 보인다 — 이후에는 해시만 남는다.
     const key = await createApiKey(b.name, currentUserId(req), scopes);
     return { key };
@@ -103,7 +109,15 @@ export async function settingsRoutes(app: FastifyInstance) {
   app.patch('/api/users/:id', async (req) => {
     const actor = requireAdmin(req);
     const { id } = req.params as { id: string };
-    const b = req.body as Record<string, any>;
+    const b = (req.body ?? {}) as Record<string, any>;
+    // role 은 권한 검사에서 문자열 비교로만 쓰인다. 아무 값이나 들어가면 "admin " 처럼 어느 쪽도
+    // 아닌 사용자가 생기고, is_active 에 문자열이 들어가면 DB 가 제멋대로 불리언으로 바꾼다.
+    if (b.role !== undefined && b.role !== null && !USER_ROLES.includes(b.role)) {
+      throw badRequest(`알 수 없는 역할입니다. 쓸 수 있는 값: ${USER_ROLES.join(', ')}`);
+    }
+    if (b.is_active !== undefined && b.is_active !== null && typeof b.is_active !== 'boolean') {
+      throw badRequest('is_active 는 true/false 여야 합니다.');
+    }
     // 자기 자신을 강등/비활성화해 락아웃되는 것을 막는다.
     if (actor.user?.id === id && (b.role === 'member' || b.is_active === false)) {
       throw badRequest('자기 자신의 권한은 낮출 수 없습니다.');
@@ -116,6 +130,38 @@ export async function settingsRoutes(app: FastifyInstance) {
     if (!user) throw notFound('사용자를 찾을 수 없습니다.');
     if (b.is_active === false) await query('delete from sessions where user_id = $1', [id]);
     return { user };
+  });
+
+  // ---- 감사 기록 ----
+  /** 누가 구독자 명단을 내보내거나 대량으로 읽었는지. 관리자만 본다. */
+  app.get('/api/audit', async (req) => {
+    requireAdmin(req);
+    const q = req.query as Record<string, string>;
+    const limit = Math.min(Math.max(Number(q.limit) || 100, 1), 500);
+    const offset = Math.max(Number(q.offset) || 0, 0);
+    const params: unknown[] = [];
+    const clauses: string[] = [];
+    if (q.action) {
+      params.push(q.action);
+      clauses.push(`a.action = $${params.length}`);
+    }
+    if (q.listId) {
+      params.push(q.listId);
+      clauses.push(`a.list_id::text = $${params.length}`);
+    }
+    const where = clauses.length ? `where ${clauses.join(' and ')}` : '';
+    return {
+      entries: await many(
+        `select a.*, l.name as list_name
+           from audit_log a left join lists l on l.id = a.list_id
+           ${where}
+          order by a.created_at desc, a.id desc
+          limit ${limit} offset ${offset}`,
+        params
+      ),
+      limit,
+      offset,
+    };
   });
 
   // ---- 수신 차단 목록 ----

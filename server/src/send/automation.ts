@@ -226,9 +226,9 @@ export async function sendDueAutomations(limit = 100) {
         to: sub.email,
         from: formatFrom(p.c.sender_name, p.c.sender_email!),
         replyTo: p.c.reply_to || undefined,
-        subject: mergeTags(prefixAdSubject(p.c.subject, p.c.is_ad), src),
-        html: personalizeTracking(mergeTags(p.html, src), recipient!.id),
-        text: p.text ? mergeTags(p.text, src) : undefined,
+        subject: mergeTags(prefixAdSubject(p.c.subject, p.c.is_ad), src, 'text'),
+        html: personalizeTracking(mergeTags(p.html, src, 'html'), recipient!.id),
+        text: p.text ? mergeTags(p.text, src, 'text') : undefined,
         headers: {
           'List-Unsubscribe': `<${links.unsubscribe}>`,
           'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',

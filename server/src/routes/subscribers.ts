@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { many, one, query } from '../db/pool.js';
 import { badRequest, notFound } from '../lib/errors.js';
 import { requireWrite } from '../auth/plugin.js';
+import { BULK_READ_THRESHOLD, recordAudit } from '../lib/audit.js';
 import { buildSegmentWhere } from '../send/audience.js';
 import { parseCsv, toCsv } from '../lib/csv.js';
 import {
@@ -99,6 +100,22 @@ export async function subscriberRoutes(app: FastifyInstance) {
       params
     );
 
+    // 한 페이지를 넘는 조회는 사실상 명단 내려받기다 — 누가 했는지 남긴다.
+    if (rows.length > BULK_READ_THRESHOLD) {
+      await recordAudit(req, {
+        action: 'subscribers.bulk_read',
+        listId: id,
+        count: rows.length,
+        detail: {
+          limit,
+          offset,
+          total: total?.count ?? 0,
+          status: q.status ?? 'subscribed',
+          filtered: Boolean(q.q || q.groupId || q.segmentId || q.filter),
+        },
+      });
+    }
+
     return { subscribers: rows, total: total?.count ?? 0, limit, offset };
   });
 
@@ -129,6 +146,13 @@ export async function subscriberRoutes(app: FastifyInstance) {
       rec['구독일'] = r.subscribed_at;
       rec['마지막 업데이트일'] = r.updated_at;
       return rec;
+    });
+
+    await recordAudit(req, {
+      action: 'subscribers.export',
+      listId: id,
+      count: rows.length,
+      detail: { status: status ?? 'all', format: 'csv' },
     });
 
     reply.header('content-type', 'text/csv; charset=utf-8');

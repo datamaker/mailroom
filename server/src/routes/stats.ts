@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { recordAudit } from '../lib/audit.js';
 import { many, one } from '../db/pool.js';
 import { notFound } from '../lib/errors.js';
 import { toCsv } from '../lib/csv.js';
@@ -248,6 +249,12 @@ export async function statsRoutes(app: FastifyInstance) {
         order by ${countCol} desc`,
       [id]
     );
+    await recordAudit(req, {
+      action: 'campaign.engagement.export',
+      campaignId: id,
+      count: rows.length,
+      detail: { type: kind },
+    });
     reply.header('content-type', 'text/csv; charset=utf-8');
     reply.header('content-disposition', `attachment; filename="${kind}-${id}.csv"`);
     return toCsv(
@@ -272,6 +279,12 @@ export async function statsRoutes(app: FastifyInstance) {
         order by e.created_at desc`,
       [id, linkId]
     );
+    await recordAudit(req, {
+      action: 'campaign.link_clicks.export',
+      campaignId: id,
+      count: rows.length,
+      detail: { linkId },
+    });
     reply.header('content-type', 'text/csv; charset=utf-8');
     reply.header('content-disposition', `attachment; filename="link-${linkId}-clicks.csv"`);
     return toCsv(
@@ -319,6 +332,7 @@ export async function statsRoutes(app: FastifyInstance) {
          from campaign_recipients where campaign_id = $1 order by id`,
       [id]
     );
+    await recordAudit(req, { action: 'campaign.stats.export', campaignId: id, count: rows.length });
     reply.header('content-type', 'text/csv; charset=utf-8');
     reply.header('content-disposition', `attachment; filename="campaign-${id}-stats.csv"`);
     return toCsv(

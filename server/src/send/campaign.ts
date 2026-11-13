@@ -78,7 +78,7 @@ export async function renderCampaign(
   });
   if (!opts.sample) return html;
   const defaults = await fieldDefaults(c.list_id);
-  return mergeTags(html, { fields: opts.sample, defaults, links: { unsubscribe: '#', preferences: '#', webview: '#' } });
+  return mergeTags(html, { fields: opts.sample, defaults, links: { unsubscribe: '#', preferences: '#', webview: '#' } }, 'html');
 }
 
 /** 발송 가능한 상태인지 확인한다. 일반 발송과 자동 이메일이 같은 기준을 쓴다. */
@@ -238,8 +238,9 @@ export async function sendCampaignBatch(campaignId: string, batchSize = config.s
     };
     const src = { fields: { ...r.merge, email: r.email }, defaults, links };
 
-    const html = personalizeTracking(mergeTags(c.content_html!, src), r.id);
-    const subject = mergeTags(prefixAdSubject(c.subject, c.is_ad), src);
+    const html = personalizeTracking(mergeTags(c.content_html!, src, 'html'), r.id);
+    // 제목·텍스트 본문은 HTML 이 아니다 — 이스케이프 대신 줄바꿈·제어문자를 지운다.
+    const subject = mergeTags(prefixAdSubject(c.subject, c.is_ad), src, 'text');
 
     const msg: OutgoingMessage = {
       to: r.email,
@@ -247,7 +248,7 @@ export async function sendCampaignBatch(campaignId: string, batchSize = config.s
       replyTo: c.reply_to || undefined,
       subject,
       html,
-      text: text ? mergeTags(text, src) : undefined,
+      text: text ? mergeTags(text, src, 'text') : undefined,
       headers: {
         // 메일 클라이언트의 원클릭 수신거부. 스팸 신고 대신 이쪽으로 유도된다.
         'List-Unsubscribe': `<${links.unsubscribe}>`,
@@ -482,8 +483,8 @@ export async function sendTestEmail(campaignId: string, recipients: string[]) {
         to: email,
         from,
         replyTo: c.reply_to || undefined,
-        subject: `[테스트] ${mergeTags(prefixAdSubject(c.subject, c.is_ad), src)}`,
-        html: mergeTags(html, src),
+        subject: `[테스트] ${mergeTags(prefixAdSubject(c.subject, c.is_ad), src, 'text')}`,
+        html: mergeTags(html, src, 'html'),
       });
       out.push({ email, ok: true });
     } catch (err) {
