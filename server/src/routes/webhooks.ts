@@ -2,43 +2,89 @@ import type { FastifyInstance } from 'fastify';
 import { config } from '../config.js';
 import { alert, pct } from '../lib/alert.js';
 import { one, query } from '../db/pool.js';
+import {
+  fetchSnsCert,
+  isSnsSubscribeUrl,
+  SnsCertFetchError,
+  verifySnsMessage,
+  type SnsCertLoader,
+  type SnsMessage,
+} from '../lib/sns.js';
+
+/** 테스트에서 네트워크를 타지 않도록 바깥으로 나가는 부분을 갈아 끼울 수 있다. */
+export interface WebhookOptions {
+  /** 서명 인증서(PEM) 로더. 기본은 SNS 호스트에서만 받아 메모리에 캐시한다. */
+  loadCert?: SnsCertLoader;
+  /** 구독 확인 주소 호출. */
+  confirmSubscription?: (url: string) => Promise<void>;
+  /** 받아들일 토픽 ARN. 비어 있으면 서명만 본다. 기본은 MAILROOM_SNS_TOPIC_ARNS. */
+  topicArns?: readonly string[];
+}
 
 /**
  * SES 이벤트 수신 (SNS HTTPS 구독).
  * 바운스/스팸신고를 받아 전역 차단 목록에 넣고 캠페인 통계에 반영한다.
  * SES 구성 세트에 이벤트 대상(SNS)을 걸어야 들어온다.
+ *
+ * 인터넷에 열린 주소라 SNS 서명이 맞는 메시지만 처리한다. 서명이 없으면(원시 전달 포함)
+ * 아무것도 하지 않고 403 으로 거절한다.
  */
-export async function webhookRoutes(app: FastifyInstance) {
+export async function webhookRoutes(app: FastifyInstance, opts: WebhookOptions = {}) {
+  const loadCert = opts.loadCert ?? fetchSnsCert;
+  const confirmSubscription =
+    opts.confirmSubscription ??
+    (async (url: string) => {
+      await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(10_000) });
+    });
+  const topicArns = new Set(opts.topicArns ?? config.sns.topicArns);
+
   app.post('/api/webhooks/ses', async (req, reply) => {
+    // SNS 는 본문이 JSON 인데 content-type 을 text/plain 으로 보낸다(문자열로 들어온다).
     const raw = typeof req.body === 'string' ? safeJson(req.body) : (req.body as any);
-    if (!raw) return reply.code(400).send({ ok: false });
+    if (!raw || typeof raw !== 'object') return reply.code(400).send({ ok: false });
+
+    let sns: SnsMessage;
+    try {
+      sns = await verifySnsMessage(raw, loadCert);
+    } catch (err) {
+      if (err instanceof SnsCertFetchError) {
+        // 메시지 탓이 아니다 — 5xx 로 답해 SNS 가 다시 보내게 한다.
+        req.log.error({ err: err.message }, 'SNS 서명 인증서 조회 실패');
+        return reply.code(503).send({ ok: false });
+      }
+      req.log.warn({ err: (err as Error).message, ip: req.ip }, 'SNS 서명 검증 실패 — 거절');
+      return reply.code(403).send({ ok: false });
+    }
+
+    // 서명이 맞아도 남의 토픽일 수 있다(누구나 자기 토픽을 이 주소에 구독시킬 수 있다).
+    if (topicArns.size > 0 && !topicArns.has(sns.TopicArn)) {
+      req.log.warn({ topic: sns.TopicArn }, '허용되지 않은 SNS 토픽 — 거절');
+      return reply.code(403).send({ ok: false });
+    }
 
     // SNS 구독 확인 — URL을 한 번 호출해 주면 구독이 활성화된다.
-    if (raw.Type === 'SubscriptionConfirmation' && raw.SubscribeURL) {
-      if (isAwsUrl(raw.SubscribeURL)) {
-        await fetch(raw.SubscribeURL).catch(() => {});
-        app.log.info({ topic: raw.TopicArn }, 'SNS 구독 확인 완료');
+    if (sns.Type === 'SubscriptionConfirmation') {
+      if (isSnsSubscribeUrl(sns.SubscribeURL)) {
+        await confirmSubscription(sns.SubscribeURL).catch(() => {});
+        req.log.info({ topic: sns.TopicArn }, 'SNS 구독 확인 완료');
       } else {
-        app.log.warn({ url: raw.SubscribeURL }, 'AWS 도메인이 아닌 SubscribeURL 무시');
+        req.log.warn({ url: sns.SubscribeURL }, 'SNS 주소가 아닌 SubscribeURL 무시');
       }
       return { ok: true };
     }
 
-    const message = raw.Type === 'Notification' ? safeJson(raw.Message) : raw;
-    if (!message) return { ok: true };
+    // 구독 해지 통지 — 할 일이 없다. SubscribeURL 을 부르면 다시 구독되므로 부르지 않는다.
+    if (sns.Type === 'UnsubscribeConfirmation') {
+      req.log.warn({ topic: sns.TopicArn }, 'SNS 구독이 해지됐습니다');
+      return { ok: true };
+    }
+
+    const message = safeJson(sns.Message);
+    if (!message || typeof message !== 'object') return { ok: true };
 
     await handleSesEvent(message);
     return { ok: true };
   });
-}
-
-function isAwsUrl(url: string) {
-  try {
-    const u = new URL(url);
-    return u.protocol === 'https:' && /(^|\.)amazonaws\.com$/.test(u.hostname);
-  } catch {
-    return false;
-  }
 }
 
 function safeJson(input: string) {

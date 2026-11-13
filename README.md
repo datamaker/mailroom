@@ -54,7 +54,19 @@ SSO 없이 혼자 볼 때는 `.env.dev` 에 `MAILROOM_DEV_AUTH_EMAIL=you@datasee
 | `MAILROOM_SEND_PROVIDER` | `ses`(기본) · `smtp` · `console` |
 | `MAILROOM_SEND_RATE` | 초당 발송 상한. SES 계정 한도보다 낮게 |
 | `AWS_SES_REGION` | 기본 `us-east-1` |
+| `MAILROOM_SNS_TOPIC_ARNS` | SES 이벤트 웹훅이 받아들일 SNS 토픽 ARN(쉼표 구분). 웹훅은 항상 SNS 서명을 검증하고, 이 값이 있으면 적힌 토픽만 받는다. **운영에서는 설정 권장** |
 | `MAILROOM_WORKER` | `0` 이면 이 프로세스는 발송하지 않음(웹 전용 인스턴스) |
+
+## 테스트
+
+```bash
+createdb -h localhost -p 5436 -U mailroom mailroom_test   # 처음 한 번
+npm run typecheck
+npm test                                                  # server/test/*.test.ts
+```
+
+테스트는 `mailroom_test` DB 에 마이그레이션을 적용하고 돈다(이름이 `_test` 로 끝나지 않으면 거부).
+다른 DB 를 쓰려면 `MAILROOM_TEST_DATABASE_URL` 로 지정한다.
 
 ## CLI
 

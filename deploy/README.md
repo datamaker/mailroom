@@ -29,7 +29,14 @@ limit_req_zone $binary_remote_addr zone=mailroom_public:10m rate=20r/s;
 - 인스턴스 롤에 `ses:SendEmail`, `ses:SendRawEmail` 이 필요하다. 없으면 발송이 전부 실패한다.
 - 바운스/스팸신고를 받으려면 구성 세트를 만들고 이벤트 대상을 SNS 로 걸어
   `https://mail.datasee.co.kr/api/webhooks/ses` 를 구독시킨다. 첫 요청의
-  `SubscriptionConfirmation` 은 서버가 자동으로 확인한다(AWS 도메인만).
+  `SubscriptionConfirmation` 은 서버가 자동으로 확인한다(SNS 서명이 맞고 `SubscribeURL` 이
+  SNS 호스트일 때만).
+- 웹훅은 **SNS 서명이 맞는 메시지만** 처리하고 나머지는 403 으로 거절한다. 그래서 구독의
+  원시 전달(raw message delivery)은 반드시 꺼져 있어야 한다(기본값) — 켜면 서명이 없어
+  전부 거절된다. 서명 인증서를 받으려면 컨테이너에서 `sns.<리전>.amazonaws.com:443` 으로
+  나갈 수 있어야 한다.
+- `MAILROOM_SNS_TOPIC_ARNS` 에 토픽 ARN 을 적어 두면 그 토픽만 받는다. 서명은 "AWS 가 보냈다"만
+  보장하므로(누구나 자기 토픽을 이 주소에 구독시킬 수 있다) 운영에서는 꼭 채운다.
 - `MAILROOM_SEND_RATE` 는 계정 한도보다 낮게. 22,000명 발송은 12/s 기준 약 30분 걸린다.
   응답을 기다리는 동안 `MAILROOM_SEND_CONCURRENCY`(기본 8)개까지 겹쳐 보낸다. 한 통씩 기다리면
   서울→us-east-1 왕복(250ms 남짓)에 묶여 설정과 상관없이 초당 4통이 한계다.

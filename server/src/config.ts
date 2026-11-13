@@ -126,6 +126,18 @@ export const config = {
     },
   },
 
+  /**
+   * SES 이벤트 웹훅(/api/webhooks/ses)이 받아들일 SNS 토픽 ARN (쉼표 구분).
+   * 비워 두면 SNS 서명만 확인한다 — 서명은 "AWS 가 보냈다"만 보장하고 "우리 토픽이다"는
+   * 보장하지 않으므로, 운영에서는 채워 두는 게 맞다.
+   */
+  sns: {
+    topicArns: (env.MAILROOM_SNS_TOPIC_ARNS || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  },
+
   worker: {
     enabled: bool(env.MAILROOM_WORKER, true),
     pollMs: int(env.MAILROOM_WORKER_POLL_MS, 2000),
@@ -141,6 +153,9 @@ export function assertProductionConfig(log: (msg: string) => void) {
   }
   if (!config.oidc.enabled && !config.devAuthEmail) {
     log('OIDC 미설정 — 아무도 로그인할 수 없습니다.');
+  }
+  if (config.send.provider === 'ses' && config.sns.topicArns.length === 0) {
+    log('MAILROOM_SNS_TOPIC_ARNS 미설정 — SES 웹훅이 서명만 맞으면 어떤 SNS 토픽이든 받습니다.');
   }
   if (config.devAuthEmail && process.env.NODE_ENV === 'production') {
     log(`MAILROOM_DEV_AUTH_EMAIL이 프로덕션에서 켜져 있습니다(${config.devAuthEmail}). 인증이 우회됩니다.`);

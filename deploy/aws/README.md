@@ -51,8 +51,18 @@ aws sns subscribe --region us-east-1 --topic-arn $TOPIC \
   --protocol https --notification-endpoint https://mail.datasee.co.kr/api/webhooks/ses
 ```
 
-구독 확인(`SubscriptionConfirmation`)은 mailroom 이 자동으로 처리한다 — AWS 도메인의
-`SubscribeURL` 만 호출하도록 되어 있다. 확인은 아래로:
+구독 확인(`SubscriptionConfirmation`)은 mailroom 이 자동으로 처리한다 — SNS 서명이 맞고
+`SubscribeURL` 이 SNS 호스트(`sns.<리전>.amazonaws.com`)일 때만 호출한다.
+
+mailroom 은 서명이 맞는 SNS 메시지만 받는다. 원시 전달(`RawMessageDelivery`)을 켜면 서명이
+빠져 전부 403 으로 거절되므로 켜지 말 것(위 명령의 기본값은 꺼짐). 토픽 ARN 은 mailroom 의
+`MAILROOM_SNS_TOPIC_ARNS` 에 넣어 이 토픽에서 온 것만 받게 한다:
+
+```bash
+echo "MAILROOM_SNS_TOPIC_ARNS=$TOPIC"
+```
+
+확인은 아래로:
 
 ```bash
 aws sns list-subscriptions-by-topic --region us-east-1 --topic-arn $TOPIC
